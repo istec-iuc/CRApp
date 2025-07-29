@@ -1,0 +1,17 @@
+<!-- File: templates/_upload.html -->
+<div class="tab-pane fade show active" id="tab-upload">
+    <h4>SBOM Dosyası Yükle</h4>
+    <div class="border p-4 bg-white rounded shadow-sm mb-4">
+      <input type="file" id="sbomFile" class="form-control mb-2" accept=".json,.xml">
+      <div class="text-end">
+        <button id="uploadBtn" class="btn btn-primary">Yükle & Önizle</button>
+      </div>
+    </div>
+    <h6>Önizleme (İlk 50 Bileşen)</h6>
+    <table id="previewTable" class="table table-bordered">
+      <thead>
+        <tr><th>Bileşen</th><th>Versiyon</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>

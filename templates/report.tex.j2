@@ -1,0 +1,31 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{longtable}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{CRA SBOM Analiz Raporu}
+\author{CRA SBOM Analyzer}
+\date{{{{ report.date }}}}
+
+\begin{document}
+\maketitle
+
+\section*{Özet}
+\begin{itemize}
+  \item SBOM: \texttt{{ report.sbom }}
+  \item Toplam Bileşen: {{ report.component_count }}
+  \item Bulunan Zafiyet Sayısı: {{ report.vuln_count }}
+  \item CRA Uyum Skoru: {{ report.score }}\%%
+\end{itemize}
+
+\section*{Zafiyet Detayları}
+\begin{longtable}{llp{8cm}}
+\textbf{Bileşen} & \textbf{CVE} & \textbf{Açıklama} \\
+\hline
+{% for v in report.vulns %}
+{{ v.component }} & {{ v.cve }} & {{ v.desc }} \\
+{% endfor %}
+\end{longtable}
+
+\end{document}

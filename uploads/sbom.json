@@ -1,0 +1,54 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-07-24T12:00:00Z",
+    "tools": [
+      {
+        "vendor": "ExampleCorp",
+        "name": "ExampleSBOMGenerator",
+        "version": "2.1.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "ExampleApp",
+      "version": "3.2.1",
+      "description": "Örnek bir uygulama SBOM’u"
+    }
+  },
+  "components": [
+    {
+      "type": "operating-system",
+      "name": "Ubuntu",
+      "version": "20.04.5 LTS"
+    },
+    {
+      "type": "library",
+      "name": "openssl",
+      "version": "1.1.1k",
+      "licenses": [
+        { "license": { "id": "OpenSSL" } }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nginx",
+      "version": "1.21.0",
+      "licenses": [
+        { "license": { "id": "BSD-2-Clause" } }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "example-service",
+      "version": "0.9.0"
+    },
+    {
+      "type": "firmware",
+      "name": "ExampleFirmware",
+      "version": "v1.0.3"
+    }
+  ]
+}

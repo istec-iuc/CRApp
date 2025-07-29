@@ -1,0 +1,4 @@
+Flask>=2.0
+Werkzeug>=2.0
+requests>=2.0
+reportlab>=3.6

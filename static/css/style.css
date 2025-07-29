@@ -1,0 +1,59 @@
+/* static/css/styles.css */
+
+/* Ensure html and body take full viewport height */
+html, body {
+    height: 100%;
+    margin: 0;
+  }
+  
+  :root {
+    --sidebar-width: 240px;
+  }
+  
+  /* Sidebar container: fixed, full height (viewport) */
+  .sidebar {
+    background-color: #343a40 !important;
+    color: #fff !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 1000;
+  }
+  
+  /* Sidebar links: white text */
+  .sidebar .nav-link {
+    color: #fff !important;
+    background-color: transparent !important;
+  }
+  .sidebar .nav-link:hover {
+    background-color: #495057 !important;
+  }
+  .sidebar .nav-link.active {
+    background-color: #495057 !important;
+  }
+  
+  /* Main content shifted right to avoid sidebar overlap */
+  .content {
+    margin-left: var(--sidebar-width);
+    padding: 1rem;
+    min-height: 100vh;
+  }
+  
+  /* Tables and cards fill content area */
+  .content .table,
+  .content .card {
+    width: calc(100% - 2rem);
+  }
+  
+  /* Audit log styling */
+  .audit-log {
+    height: 200px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    padding: .5rem;
+    font-family: monospace;
+  }

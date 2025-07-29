@@ -1,0 +1,25 @@
+<!-- File: templates/_plans.html -->
+<div class="tab-pane fade" id="tab-plans">
+  <h4>Güncelleme & Yama Planları</h4>
+
+  <!-- Plan ekleme formu -->
+  <form id="planForm" class="mb-3 d-flex gap-2">
+    <input type="text" id="planComponent" class="form-control" placeholder="Bileşen Adı" required>
+    <input type="date" id="planDate" class="form-control" required>
+    <input type="text" id="planNote" class="form-control" placeholder="Açıklama">
+    <button type="submit" class="btn btn-primary">Plan Ekle</button>
+  </form>
+
+  <!-- Plan tablosu -->
+  <table id="planTable" class="table table-sm">
+    <thead>
+      <tr>
+        <th>Bileşen</th>
+        <th>Tarih</th>
+        <th>Açıklama</th>
+        <th>Durum</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
