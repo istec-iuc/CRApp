@@ -9,6 +9,8 @@ from werkzeug.utils import secure_filename
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from version_checker import check_version
+from cra_rule_checker import run_cra_checks
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = 'replace_with_secure_key'
@@ -110,48 +112,39 @@ def version_check():
 
     # SBOM’u parse et
     components = parse_sbom(path)
+    results = check_version(components)
 
-    results = []
-    for comp in components:
-        name = comp.get('component')
-        current = comp.get('version') or 'unknown'
-        latest_ver = None
-
-        # 1) PyPI'de ara
-        try:
-            r = requests.get(f'https://pypi.org/pypi/{name}/json', timeout=5)
-            if r.status_code == 200:
-                latest_ver = r.json().get('info', {}).get('version')
-        except Exception:
-            pass
-
-        # 2) npm registry'de ara (fallback)
-        if not latest_ver:
-            try:
-                r2 = requests.get(f'https://registry.npmjs.org/{name}', timeout=5)
-                if r2.status_code == 200:
-                    latest_ver = r2.json().get('dist-tags', {}).get('latest')
-            except Exception:
-                pass
-
-        results.append({
-            'component':       name,
-            'current_version': current,
-            'latest_version':  latest_ver or 'unknown'
-        })
-
+    #Relevant to the LogBook
+    record_log(session['user'], "Versiyon kontrolü yapıldı")
+    
     return jsonify(results)
 
 @app.route('/score', methods=['GET'])
 def cra_score():
     if 'user' not in session:
         return jsonify({'error': 'Yetkisiz'}), 401
+    
     # TODO: Compute CRA compliance score and criteria matching
-    return jsonify({'score': 81, 'criteria': [
-        {'name': 'Default Şifre', 'status': False},
-        {'name': 'Known Vulnerabilities', 'status': True},
-        {'name': 'Update Policy', 'status': False}
-    ]})
+    # Son yüklenen SBOM dosyasını bul
+    uploads = app.config['UPLOAD_FOLDER']
+    files = os.listdir(uploads)
+
+    if not files:
+        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
+    
+    latest_sbom = sorted(
+        files,
+        key=lambda f: os.path.getctime(os.path.join(uploads, f))
+    )[-1]
+    path = os.path.join(uploads, latest_sbom)
+
+    #Send the path to run_cra_checks
+    results = run_cra_checks(path)
+
+    #Relevant to the LogBook
+    record_log(session['user'], "CRA skoru hesaplandı")
+
+    return jsonify(results)
 
 @app.route('/plans', methods=['GET', 'POST'])
 def plans():
