@@ -1,7 +1,15 @@
 <!-- File: templates/_scan.html -->
 <div class="tab-pane fade" id="tab-scan">
     <h4>CVE Tarama</h4>
-    <button id="scanBtn" class="btn btn-outline-primary mb-3">Taramayı Başlat</button>
+    <button class="btn-outline-primary btn" id="scanBtnOnline">Taramayı Başlat</button>
+    <!--Yeni Butonlar -->
+    <button class="btn btn-outline-secondary" id="scanBtnOffline">Çevrimdışı Tarama</button>
+    <button class="btn btn-outline-warning" id="cveUpdateBtn">CVE Veritabanını Güncelle</button>
+    <!--Son Güncelleme Metni -->
+    <div class="text-muted">
+      Son CVE güncellemesi: <span id="last-updated">2025-07-30</span>
+    </div>
+
     <div class="progress mb-2"><div id="scanProgress" class="progress-bar" style="width:0%"></div></div>
     <div class="audit-log mb-3" id="scanLog">Tarama bekleniyor...</div>
     <h6>Sonuçlar</h6>

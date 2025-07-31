@@ -11,6 +11,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from version_checker import check_version
 from cra_rule_checker import run_cra_checks
+from offline_vulnerability_scanner import scan_vulnerabilities_offline, load_cve_database
+from update_vulnerability_scanner import download_and_extract_latest_cve_files
+from datetime import datetime, timezone
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = 'replace_with_secure_key'
@@ -79,7 +82,7 @@ def upload_sbom():
     components = parse_sbom(path)
     return jsonify(components[:50])
 
-@app.route('/scan', methods=['POST'])
+@app.route('/scan-online', methods=['POST'])
 def scan_cve():
     if 'user' not in session:
         return jsonify({'error': 'Yetkisiz'}), 401
@@ -93,6 +96,62 @@ def scan_cve():
     api_key = request.args.get('api_key')
     results = scan_vulnerabilities(components, api_key=api_key)
     return jsonify(results)
+
+@app.route('/scan-offline', methods=['POST'])
+def scan_cve_offline():
+    if 'user' not in session:
+        return jsonify({'error': 'Yetkisiz'}), 401
+
+    files = os.listdir(app.config['UPLOAD_FOLDER'])
+    if not files:
+        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
+
+    latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config['UPLOAD_FOLDER'], f)))[-1]
+    path = os.path.join(app.config['UPLOAD_FOLDER'], latest)
+    components = parse_sbom(path)
+
+    #print('Loading CVE database')
+    #cve_data = load_cve_database()
+    #print('LOADED CVE DATABASE. Start scanning')
+    results = scan_vulnerabilities_offline(components)
+    print('ENG OF SCANNING')
+    return jsonify(results)
+
+@app.route("/last-updated", methods=["GET"])
+def get_last_updated():
+    if 'user' not in session:
+        return jsonify({'error': 'Yetkisiz'}), 401
+    
+    try:
+        with open("last_updated.txt", "r") as f:
+            timestamp = f.read().strip()
+    except FileNotFoundError:
+        timestamp = "Hiç güncellenmedi"
+    return jsonify({"timestamp": timestamp})
+
+
+@app.route("/update-cve", methods=["POST"])
+def update_cve():
+    if 'user' not in session:
+            return jsonify({'error': 'Yetkisiz'}), 401
+
+    try:
+        download_and_extract_latest_cve_files()
+
+        # Save the timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        with open("last_updated.txt", "w") as f:
+            f.write(timestamp)
+
+        return jsonify({
+            "status": "success",
+            "message": "CVE data updated successfully.",
+            "timestamp": timestamp  # Return timestamp to JS too
+        })
+        return jsonify({"status": "success", "message": "CVE data updated successfully."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 
 @app.route('/version-check', methods=['GET'])
 def version_check():

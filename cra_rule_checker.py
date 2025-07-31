@@ -7,15 +7,8 @@ from sbom_parser import parse_sbom
 from werkzeug.utils import secure_filename
 import traceback
 import json
-
-'''
-def getLatestVersion(sbom_data):
-    global LATEST_VERSIONS
-    LATEST_VERSIONS = check_version(sbom_data)
-
-    print('Line: 9 from cra_rule_checker.py:')
-    print(LATEST_VERSIONS)
-'''
+import xmltodict
+import os
 
 ###
 def compare_versions(current, latest):
@@ -93,12 +86,38 @@ def check_update_policy(component):
 def extract_metadata(file_path):
     #Take out the metadata from it if it's present
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            sbom_data = json.load(f)
+        # Determine file type
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
 
-        metadata = sbom_data.get("metadata", {})
+        # Load content depending on file extension
+        with open(file_path, 'r', encoding='utf-8') as f:
+            if ext == '.json':
+                sbom_data = json.load(f)
+            elif ext == '.xml':
+                sbom_data = xmltodict.parse(f.read())
+            else:
+                return {
+                    "status": "fail",
+                    "justification": "Unsupported file format"
+                }
+
+        # Get metadata depending on format
+        if ext == '.json':
+            metadata = sbom_data.get("metadata", {})
+        elif ext == '.xml':
+            metadata = sbom_data.get("bom", {}).get("metadata", {})
+        else:
+            metadata = {}
+
         component = metadata.get("component", {})
-        model_name = component.get("name")
+
+        model_name = None
+
+        # Only try to extract name if component is a dict-like object
+        if isinstance(component, dict):
+            model_name = component.get("name")
+
 
         if model_name and model_name.strip():
             return {"status": "pass", "justification": "Name of model present"}
@@ -114,7 +133,6 @@ def extract_metadata(file_path):
             "status": "fail",
             "justification": "Error reading or parsing SBOM file"
         }
-    
 
 
 def summarize_cra_results(rule_results):
