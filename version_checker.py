@@ -1,34 +1,56 @@
-import requests
+# version_checker.py
+
+import os, json, platform
+from packaging import version as pkg_version
+
+# JSON mapping’i yükle, anahtarları lowercase yap
+BASE = os.path.dirname(__file__)
+try:
+    with open(os.path.join(BASE, 'version_mapping.json'), encoding='utf-8') as f:
+        _raw = json.load(f)
+    VERSION_MAP = {k.lower(): v for k, v in _raw.items()}
+except FileNotFoundError:
+    VERSION_MAP = {}
 
 def check_version(components):
     results = []
-
     for comp in components:
-        name = comp.get('component')
+        name    = comp.get('component','').strip()
         current = comp.get('version') or 'unknown'
-        latest_ver = None
+        key     = name.lower()
+        raw     = VERSION_MAP.get(key)
 
-        # 1) PyPI'de ara
+        # Python bileşeni için ortam sürümü
+        if key == 'python':
+            latest_list = [platform.python_version()]
+        # eğer JSON’da bir liste varsa
+        elif isinstance(raw, list):
+            latest_list = raw
+        # tek değer ise listeye al
+        elif isinstance(raw, str):
+            latest_list = [raw]
+        else:
+            latest_list = []
+
+        # en yüksek versiyon (varsa)
         try:
-            r = requests.get(f'https://pypi.org/pypi/{name}/json', timeout=5)
-            if r.status_code == 200:
-                latest_ver = r.json().get('info', {}).get('version')
+            latest = str(max(latest_list, key=pkg_version.parse))
         except Exception:
-            pass
+            latest = 'unknown'
 
-        # 2) npm registry'de ara (fallback)
-        if not latest_ver:
+        # güncel mi?
+        is_current = False
+        if current != 'unknown' and latest != 'unknown':
             try:
-                r2 = requests.get(f'https://registry.npmjs.org/{name}', timeout=5)
-                if r2.status_code == 200:
-                    latest_ver = r2.json().get('dist-tags', {}).get('latest')
-            except Exception:
-                pass
+                is_current = pkg_version.parse(current) >= pkg_version.parse(latest)
+            except:
+                is_current = False
 
         results.append({
             'component':       name,
             'current_version': current,
-            'latest_version':  latest_ver or 'unknown'
+            'latest_version':  latest,
+            'all_latest':      latest_list,
+            'is_current':      is_current
         })
-
     return results
