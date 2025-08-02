@@ -14,6 +14,8 @@
     <small>Hoşgeldin, {{ user }}</small>
     <ul class="nav nav-pills flex-column mt-3 mb-auto">
       <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-upload">SBOM Yükle</button></li>
+      <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-product-add">Ürün Ekle</button></li>
+      <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-products">Ürünler</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-scan">CVE Tarama</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-version">Versiyon Kontrolü</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-score">CRA Skoru</button></li>
@@ -27,6 +29,8 @@
   <!-- Main Content -->
   <main class="flex-grow-1 overflow-auto p-4">
     <div class="tab-content">
+      {% include '_product_add.html' %}
+      {% include '_products.html' %}
       {% include '_upload.html' %}
       {% include '_scan.html' %}
       {% include '_version.html' %}
