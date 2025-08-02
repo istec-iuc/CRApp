@@ -440,4 +440,71 @@ updateLastUpdatedDisplay();
   // “Ürünler” sekmesi aktif olduğunda da listeyi yüklesin
   document.querySelector('[data-bs-target="#tab-products"]')
     .addEventListener('shown.bs.tab', loadProducts);
+
+    const compareTabBtn = document.querySelector('[data-bs-target="#tab-compare"]');
+  compareTabBtn.addEventListener('shown.bs.tab', async () => {
+    const res = await fetch('/products');
+    if (!res.ok) return;
+    const prods = await res.json();
+
+    const left = document.getElementById('leftProduct');
+    const right = document.getElementById('rightProduct');
+    left.innerHTML  = '<option value="">Seçiniz</option>';
+    right.innerHTML = '<option value="">Seçiniz</option>';
+
+    prods.forEach(p => {
+      const txt = `${p.brand} ${p.model} (${p.version})`;
+      const o1 = document.createElement('option');
+      o1.value = p.id; o1.textContent = txt;
+      const o2 = o1.cloneNode(true);
+      right.appendChild(o2);
+      left.appendChild(o1);
+    });
+  });
+
+  // Form submit → karşılaştırma isteği
+  document.getElementById('compareForm')
+    .addEventListener('submit', async e => {
+      e.preventDefault();
+      const leftId  = document.getElementById('leftProduct').value;
+      const rightId = document.getElementById('rightProduct').value;
+      if (!leftId || !rightId) {
+        return alert('İki farklı ürün seçmelisiniz.');
+      }
+      if (leftId === rightId) {
+        return alert('Aynı ürünü seçemezsiniz.');
+      }
+
+      const res = await fetch(`/compare?left=${leftId}&right=${rightId}`);
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(err.error || 'Karşılaştırma hatası');
+      }
+      const data = await res.json();
+
+      // Tablo oluştur
+      const div = document.getElementById('compareResult');
+      let html = `
+        <table class="table table-striped table-bordered">
+          <thead class="table-light">
+            <tr>
+              <th>Bileşen</th>
+              <th>Ürün 1</th>
+              <th>Ürün 2</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      data.forEach(r => {
+        html += `
+          <tr>
+            <td>${r.component}</td>
+            <td>${r.left_version}</td>
+            <td>${r.right_version}</td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table>`;
+      div.innerHTML = html;
+    });
 });
