@@ -27,9 +27,21 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // CVE Tarama
-  const scanBtn = document.getElementById('scanBtn');
-  if (scanBtn) {
-    scanBtn.addEventListener('click', async () => {
+
+  const scanBtnOnline = document.getElementById('scanBtnOnline');
+  const scanBtnOffline = document.getElementById("scanBtnOffline");
+  const scanUpdateBtn = document.getElementById('cveUpdateBtn');
+
+  //ONLINE CVE Scan
+  if (scanBtnOnline) {
+    scanBtnOnline.addEventListener('click', async () => {
+        scanBtnOnline.disabled = true;
+        scanBtnOnline.textContent = 'Taraniyor...';
+
+        //Turn off the other buttons
+        scanBtnOffline.disabled = true;
+        scanUpdateBtn.disabled = true;
+
       const progressBar = document.getElementById('scanProgress');
       const scanLog = document.getElementById('scanLog');
       const scanTableBody = document.querySelector('#scanTable tbody');
@@ -37,7 +49,7 @@ window.addEventListener('DOMContentLoaded', () => {
       scanLog.innerHTML = '';
       scanTableBody.innerHTML = '';
       try {
-        const res = await fetch('/scan', { method: 'POST' });
+        const res = await fetch('/scan-online', { method: 'POST' });
         let progress = 0;
         const timer = setInterval(() => {
           progress = Math.min(progress + 20, 100);
@@ -57,9 +69,115 @@ window.addEventListener('DOMContentLoaded', () => {
       } catch (e) {
         console.error(e);
         scanLog.innerHTML += '✖ Tarama hatası';
-      }
+      } finally {
+          //Return to default after successful attempt
+          scanBtnOnline.disabled = false;
+          scanBtnOnline.textContent = 'Taramayı Başlat';
+          scanBtnOffline.disabled = false;
+          scanUpdateBtn.disabled = false;          
+        };
+
     });
   }
+
+  //OFFLINE CVE Scan
+  if (scanBtnOffline) {
+    scanBtnOffline.addEventListener('click', async () => {
+      scanBtnOffline.disabled = true;
+      scanBtnOffline.textContent = 'Taraniyor...';
+
+      //Turn off the other buttons
+      scanBtnOnline.disabled = true;
+      scanUpdateBtn.disabled = true;
+
+      const progressBar = document.getElementById('scanProgress');
+      const scanLog = document.getElementById('scanLog');
+      const scanTableBody = document.querySelector('#scanTable tbody');
+      progressBar.style.width = '0%';
+      scanLog.innerHTML = '';
+      scanTableBody.innerHTML = '';
+      try {
+        //NEEDS MORE ATTENTION
+        const res = await fetch('/scan-offline', { method: 'POST' });
+        let progress = 0;
+        const timer = setInterval(() => {
+          progress = Math.min(progress + 20, 100);
+          progressBar.style.width = `${progress}%`;
+          scanLog.innerHTML += `↻ ${new Date().toLocaleTimeString()} - %${progress}<br>`;
+          if (progress >= 100) clearInterval(timer);
+        }, 400);
+        const results = await res.json();
+        clearInterval(timer);
+        progressBar.style.width = '100%';
+        scanLog.innerHTML += `✔ Tarama tamamlandı<br>`;
+        results.forEach(item => {
+          const row = document.createElement('tr');
+          row.innerHTML = `<td>${item.component}</td><td>${item.cve}</td><td>${item.cvss}</td><td>${item.desc}</td>`;
+          scanTableBody.appendChild(row);
+        });
+      } catch (e) {
+        console.error(e);
+        scanLog.innerHTML += '✖ Tarama hatası';
+      } finally {
+          //Return to default after successful attempt
+          scanBtnOffline.disabled = false;
+          scanBtnOffline.textContent = 'Taramayı Başlat';
+          scanBtnOnline.disabled = false;
+          scanUpdateBtn.disabled = false;          
+        };
+    }) 
+  }; //End of if for Offline Scan Btn
+
+
+  //CVE Güncellemenk
+
+  // Update timestamp in the UI
+  async function updateLastUpdatedDisplay() {
+    try {
+        const res = await fetch("/last-updated");
+        const data = await res.json();
+        document.getElementById("last-updated").textContent = data.timestamp;
+    } catch (e) {
+        console.warn("Could not fetch last update time", e);
+    }
+}
+
+// On page load
+updateLastUpdatedDisplay();
+
+
+  if (scanUpdateBtn) {
+    scanUpdateBtn.addEventListener('click', async () => {
+      scanUpdateBtn.disabled = true;
+      scanUpdateBtn.textContent = 'Güncelleniyor...';
+
+      //Turn off the other buttons
+      scanBtnOnline.disabled = true;
+      scanBtnOffline.disabled = true;
+
+      try {
+          const res = await fetch("/update-cve", { method: "POST" });
+          const data = await res.json(); // Await the parsed JSON
+          alert(data.message);
+
+          // Update timestamp in the UI after successful update
+          if (data.timestamp) {
+              document.getElementById("last-updated").textContent = data.timestamp;
+          } else {
+              await updateLastUpdatedDisplay();  // fallback
+          }
+      } catch (e) {
+          alert("Update failed: " + e);
+      } finally {
+          //Return to default after successful attempt
+          scanUpdateBtn.disabled = false; 
+          scanUpdateBtn.textContent = 'CVE Veritabanını Güncelle';
+          scanBtnOffline.disabled = false;
+          scanBtnOnline.disabled = false;
+      }
+    })
+  }; //End of if for Update CVE data
+
 
   // Versiyon & Güncellik Kontrolü
   const versionBtn = document.getElementById('versionBtn');
@@ -67,6 +185,7 @@ window.addEventListener('DOMContentLoaded', () => {
     versionBtn.addEventListener('click', async () => {
       versionBtn.disabled = true;
       versionBtn.textContent = 'Kontrol ediliyor...';
+
       try {
         const res = await fetch('/version-check');
         const data = await res.json();
@@ -99,6 +218,7 @@ window.addEventListener('DOMContentLoaded', () => {
     scoreBtn.addEventListener('click', async () => {
       scoreBtn.disabled = true;
       scoreBtn.textContent = 'Hesaplanıyor...';
+
       try {
         const res = await fetch('/score');
         const json = await res.json();
