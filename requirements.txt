@@ -12,3 +12,8 @@ lxml==6.0.0
 packaging==25.0
 python-docx==1.2.0
 PyYAML==6.0.2
+
+pymysql
+flask_sqlalchemy
+sqlalchemy
+cryptography
