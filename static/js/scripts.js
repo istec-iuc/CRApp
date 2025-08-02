@@ -121,7 +121,7 @@ window.addEventListener('DOMContentLoaded', () => {
       } finally {
           //Return to default after successful attempt
           scanBtnOffline.disabled = false;
-          scanBtnOffline.textContent = 'Taramayı Başlat';
+          scanBtnOffline.textContent = 'Çevrimdışı Tarama';
           scanBtnOnline.disabled = false;
           scanUpdateBtn.disabled = false;          
         };
