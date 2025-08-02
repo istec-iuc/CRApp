@@ -1,0 +1,35 @@
+<!-- templates/_product_add.html -->
+<div class="tab-pane fade" id="tab-product-add">
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0">Yeni Ürün Ekle</h5>
+    </div>
+    <div class="card-body">
+      <form id="productForm" enctype="multipart/form-data">
+        <div class="row gx-3 gy-3">
+          <div class="col-md-6">
+            <label for="brand" class="form-label">Marka</label>
+            <input type="text" id="brand" name="brand" class="form-control" placeholder="Örn: Acme" required>
+          </div>
+          <div class="col-md-6">
+            <label for="model" class="form-label">Model</label>
+            <input type="text" id="model" name="model" class="form-control" placeholder="Örn: X1000" required>
+          </div>
+          <div class="col-md-6">
+            <label for="version" class="form-label">Versiyon</label>
+            <input type="text" id="version" name="version" class="form-control" placeholder="Örn: 1.0.3" required>
+          </div>
+          <div class="col-md-6">
+            <label for="sbom" class="form-label">SBOM Dosyası</label>
+            <input type="file" id="sbom" name="sbom" class="form-control" accept=".json,.xml" required>
+          </div>
+        </div>
+        <div class="mt-4 text-end">
+          <button type="submit" class="btn btn-success px-4">
+            <i class="bi bi-plus-circle me-1"></i> Ürünü Ekle
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -351,4 +351,93 @@ updateLastUpdatedDisplay();
     });
     loadReports();
   }
+
+  async function loadProducts() {
+    const res = await fetch('/products');
+    if (!res.ok) return;
+    const products = await res.json();
+    const tbody = document.querySelector('#productsTable tbody');
+    tbody.innerHTML = '';
+  
+    products.forEach(p => {
+      // Dosya adından timestamp’i çıkar, yoksa tamamını göster
+      const displayName = p.sbom_path.includes('_')
+        ? p.sbom_path.substring(p.sbom_path.indexOf('_') + 1)
+        : p.sbom_path;
+  
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${p.id}</td>
+        <td>${p.brand}</td>
+        <td>${p.model}</td>
+        <td>${p.version}</td>
+        <td>
+          <a href="/products/sbom/${p.sbom_path}" target="_blank">
+            ${displayName}
+          </a>
+        </td>
+        <td>${new Date(p.created).toLocaleString()}</td>
+        <td>
+          <button
+            class="btn btn-sm btn-danger btn-delete"
+            data-id="${p.id}"
+            >
+            Sil
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+  // Tab gösterildiğinde de yükle
+  document
+    .querySelector('[data-bs-target="#tab-products"]')
+    .addEventListener('shown.bs.tab', loadProducts);
+
+  // Silme butonu dinleyicisi
+  document
+    .querySelector('#productsTable tbody')
+    .addEventListener('click', async e => {
+      if (!e.target.matches('.btn-delete')) return;
+      const id = e.target.dataset.id;
+      if (!confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
+
+      const res = await fetch(`/products/delete/${id}`, { method: 'POST' });
+      if (!res.ok) {
+        alert('Silme işlemi başarısız oldu.');
+      } else {
+        // Başarılı silme → listeyi yenile
+        await loadProducts();
+      }
+    });
+  
+  // Ürün ekleme formu submit
+  document.getElementById('productForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const form = e.target;
+    const fd = new FormData(form);
+  
+    const res = await fetch('/products/new', {
+      method: 'POST',
+      body: fd
+    });
+    if (!res.ok) {
+      return alert('Ürün eklenirken bir hata oluştu.');
+    }
+  
+    // 1) Formu temizle
+    form.reset();
+  
+    // 2) “Ürünler” sekmesini aktif et
+    const productsTabBtn = document.querySelector('[data-bs-target="#tab-products"]');
+    const tabInstance = bootstrap.Tab.getOrCreateInstance(productsTabBtn);
+    tabInstance.show();
+  
+    // 3) Sekme geçişini bekle ve listeyi yükle
+    productsTabBtn.addEventListener('shown.bs.tab', loadProducts, { once: true });
+  });
+  
+  // “Ürünler” sekmesi aktif olduğunda da listeyi yüklesin
+  document.querySelector('[data-bs-target="#tab-products"]')
+    .addEventListener('shown.bs.tab', loadProducts);
 });

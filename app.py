@@ -1,100 +1,143 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+# app.py
+import os
+import time
+from io import BytesIO
+from flask import (
+    Flask, render_template, request, redirect,
+    url_for, session, jsonify, send_from_directory
+)
 from werkzeug.utils import secure_filename
-import requests
-import os, time
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from sbom_parser import parse_sbom
 from vulnerability_scanner import scan_vulnerabilities
-from flask import send_file, send_from_directory
-from werkzeug.utils import secure_filename
-from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 from version_checker import check_version
 from cra_rule_checker import run_cra_checks
 from offline_vulnerability_scanner import scan_vulnerabilities_offline, load_cve_database
 from update_vulnerability_scanner import download_and_extract_latest_cve_files
 from datetime import datetime, timezone
 
-app = Flask(__name__, template_folder='templates')
-app.secret_key = 'replace_with_secure_key'
-app.config['UPLOAD_FOLDER'] = 'uploads'
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+# ─── App & Config ──────────────────────────────────────────────────────────────
 
-# Demo in-memory stores
-USERS = {}
-PLANS = []        # {'user','component','date','note','status'}
-LOGS = []         # {'user','timestamp','action'}
+app = Flask(__name__, template_folder="templates")
+app.secret_key = "replace_with_secure_key"
+
+# Upload & Report klasörleri
+app.config["UPLOAD_FOLDER"] = "uploads"
+app.config["REPORT_FOLDER"] = "reports"
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+os.makedirs(app.config["REPORT_FOLDER"], exist_ok=True)
+
+# ─── MySQL Bağlantı Ayarları ─────────────────────────────────────────────────────
+DB_USER     = "cra_user"
+DB_PASSWORD = "StrongPassw0rd!"
+DB_HOST     = "localhost"
+DB_NAME     = "cra_analyzer"
+
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+# SQLAlchemy ORM nesnesi
+db = SQLAlchemy(app)
+
+# ─── Models ───────────────────────────────────────────────────────────────────
+
+class Product(db.Model):
+    __tablename__ = "products"
+    id        = db.Column(db.Integer,  primary_key=True)
+    user      = db.Column(db.String(128), nullable=False)
+    brand     = db.Column(db.String(128), nullable=False)
+    model     = db.Column(db.String(128), nullable=False)
+    version   = db.Column(db.String(64),  nullable=False)
+    sbom_path = db.Column(db.String(256), nullable=False)
+    created   = db.Column(db.DateTime,    server_default=db.func.now())
+
+
+# ─── In‐Memory Stores & Utils ─────────────────────────────────────────────────
+
+USERS   = {}   # demo kullanıcı store
+PLANS   = []   # güncelleme planları
+LOGS    = []   # seyir defteri
+REPORTS = []   # oluşturulan raporlar
 
 def record_log(user, action):
-    
     LOGS.append({
-        'user': user,
-        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-        'action': action
+        "user":      user,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "action":    action
     })
 
-@app.route('/register', methods=['GET', 'POST'])
+
+# ─── Auth Routes ───────────────────────────────────────────────────────────────
+
+@app.route("/register", methods=["GET","POST"])
 def register():
-    if request.method == 'POST':
-        email = request.form['email']
-        pwd = request.form['password']
+    if request.method == "POST":
+        email = request.form["email"]
+        pwd   = request.form["password"]
         if email in USERS:
-            return render_template('register.html', error='Bu e-posta zaten kayıtlı.')
+            return render_template("register.html", error="Bu e-posta zaten kayıtlı.")
         USERS[email] = pwd
-        session['user'] = email
-        return redirect(url_for('index'))
-    return render_template('register.html')
+        session["user"] = email
+        return redirect(url_for("index"))
+    return render_template("register.html")
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        pwd = request.form['password']
+    if request.method == "POST":
+        email = request.form["email"]
+        pwd   = request.form["password"]
         if USERS.get(email) == pwd:
-            session['user'] = email
-            return redirect(url_for('index'))
-        return render_template('login.html', error='Geçersiz e-posta veya şifre.')
-    return render_template('login.html')
+            session["user"] = email
+            return redirect(url_for("index"))
+        return render_template("login.html", error="Geçersiz e-posta veya şifre.")
+    return render_template("login.html")
 
-@app.route('/logout')
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect(url_for("login"))
 
-@app.route('/')
+
+# ─── Main Dashboard ────────────────────────────────────────────────────────────
+
+@app.route("/")
 def index():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    return render_template('index.html', user=session['user'])
+    if "user" not in session:
+        return redirect(url_for("login"))
+    return render_template("index.html", user=session["user"])
 
-@app.route('/upload', methods=['POST'])
+
+# ─── SBOM & Analysis ──────────────────────────────────────────────────────────
+
+@app.route("/upload", methods=["POST"])
 def upload_sbom():
-    if 'user' not in session:
-        return jsonify({'error': 'Yetkisiz'}), 401
-    f = request.files.get('file')
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    f = request.files.get("file")
     if not f:
-        return jsonify({'error': 'Dosya bulunamadı'}), 400
-    filename = secure_filename(f.filename)
-    path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        return jsonify({"error":"Dosya bulunamadı"}), 400
+    fn   = secure_filename(f.filename)
+    path = os.path.join(app.config["UPLOAD_FOLDER"], fn)
     f.save(path)
-    # Gerçek SBOM parse işlemi
-    components = parse_sbom(path)
-    return jsonify(components[:50])
+    comps = parse_sbom(path)
+    return jsonify(comps[:50])
 
 @app.route('/scan-online', methods=['POST'])
 def scan_cve():
-    if 'user' not in session:
-        return jsonify({'error': 'Yetkisiz'}), 401
-    files = os.listdir(app.config['UPLOAD_FOLDER'])
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    files = os.listdir(app.config["UPLOAD_FOLDER"])
     if not files:
-        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
-    latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config['UPLOAD_FOLDER'], f)))[-1]
-    path = os.path.join(app.config['UPLOAD_FOLDER'], latest)
-    components = parse_sbom(path)
-    # Gerçek CVE taraması
-    api_key = request.args.get('api_key')
-    results = scan_vulnerabilities(components, api_key=api_key)
+        return jsonify({"error":"Önce SBOM yükleyin"}), 400
+    latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1]
+    comps  = parse_sbom(os.path.join(app.config["UPLOAD_FOLDER"], latest))
+    results = scan_vulnerabilities(comps)
     return jsonify(results)
 
 @app.route('/scan-offline', methods=['POST'])
@@ -155,168 +198,189 @@ def update_cve():
 
 @app.route('/version-check', methods=['GET'])
 def version_check():
-    if 'user' not in session:
-        return jsonify({'error': 'Yetkisiz'}), 401
-
-    # Son yüklenen SBOM dosyasını bul
-    uploads = app.config['UPLOAD_FOLDER']
-    files = os.listdir(uploads)
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    files = os.listdir(app.config["UPLOAD_FOLDER"])
     if not files:
-        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
-    latest_sbom = sorted(
-        files,
-        key=lambda f: os.path.getctime(os.path.join(uploads, f))
-    )[-1]
-    path = os.path.join(uploads, latest_sbom)
+        return jsonify({"error":"Önce SBOM yükleyin"}), 400
+    latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
+                    sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
+    comps  = parse_sbom(latest_path)
+    res    = check_version(comps)
+    record_log(session["user"], "Versiyon kontrolü yapıldı")
+    return jsonify(res)
 
-    # SBOM’u parse et
-    components = parse_sbom(path)
-    results = check_version(components)
-
-    #Relevant to the LogBook
-    record_log(session['user'], "Versiyon kontrolü yapıldı")
-    
-    return jsonify(results)
-
-@app.route('/score', methods=['GET'])
+@app.route("/score")
 def cra_score():
-    if 'user' not in session:
-        return jsonify({'error': 'Yetkisiz'}), 401
-    
-    # TODO: Compute CRA compliance score and criteria matching
-    # Son yüklenen SBOM dosyasını bul
-    uploads = app.config['UPLOAD_FOLDER']
-    files = os.listdir(uploads)
-
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    files = os.listdir(app.config["UPLOAD_FOLDER"])
     if not files:
-        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
-    
-    latest_sbom = sorted(
-        files,
-        key=lambda f: os.path.getctime(os.path.join(uploads, f))
-    )[-1]
-    path = os.path.join(uploads, latest_sbom)
+        return jsonify({"error":"Önce SBOM yükleyin"}), 400
+    latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
+                    sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
+    res    = run_cra_checks(latest_path)
+    record_log(session["user"], "CRA skoru hesaplandı")
+    return jsonify(res)
 
-    #Send the path to run_cra_checks
-    results = run_cra_checks(path)
 
-    #Relevant to the LogBook
-    record_log(session['user'], "CRA skoru hesaplandı")
+# ─── Plans & Logs ─────────────────────────────────────────────────────────────
 
-    return jsonify(results)
-
-@app.route('/plans', methods=['GET', 'POST'])
+@app.route("/plans", methods=["GET","POST"])
 def plans():
-    if 'user' not in session:
-        return jsonify({'error':'Yetkisiz'}), 401
-    user = session['user']
-    if request.method == 'POST':
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    user = session["user"]
+    if request.method == "POST":
         data = request.get_json()
         plan = {
-            'user': user,
-            'component': data.get('component'),
-            'date': data.get('date'),
-            'note': data.get('note'),
-            'status': 'Beklemede'
+            "user":      user,
+            "component": data["component"],
+            "date":      data["date"],
+            "note":      data.get("note",""),
+            "status":    "Beklemede"
         }
         PLANS.append(plan)
         return jsonify(plan), 201
-    # GET: sadece o kullanıcıya ait planları döndür
-    user_plans = [p for p in PLANS if p['user'] == user]
-    return jsonify(user_plans)
+    return jsonify([p for p in PLANS if p["user"]==user])
 
-@app.route('/logs', methods=['GET'])
+@app.route("/logs")
 def logs():
-    user=session.get('user')
-    if not user: return jsonify({'error':'Yetkisiz'}),401
-    user_logs=[l for l in LOGS if l['user']==user]
-    return jsonify(user_logs)
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    return jsonify([l for l in LOGS if l["user"]==session["user"]])
 
 
-# En başta:
-REPORTS = []     # {user,date,sbom,component_count,vuln_count,score,file}
+# ─── Reports ──────────────────────────────────────────────────────────────────
 
-app.config['REPORT_FOLDER'] = 'reports'
-os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
-
-# PDF indirme route
-@app.route('/reports/files/<path:filename>')
+@app.route("/reports/files/<path:filename>")
 def report_file(filename):
-    return send_from_directory(app.config['REPORT_FOLDER'], filename, as_attachment=True)
+    return send_from_directory(app.config["REPORT_FOLDER"], filename, as_attachment=True)
 
-# Rapor oluşturma ve listeleme
-@app.route('/reports', methods=['GET', 'POST'])
+@app.route("/reports", methods=["GET","POST"])
 def reports():
-    user = session.get('user')
-    if not user:
-        return jsonify({'error': 'Yetkisiz'}), 401
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    files = os.listdir(app.config["UPLOAD_FOLDER"])
+    if not files:
+        return jsonify({"error":"Önce SBOM yükleyin"}), 400
+    latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
+                    sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
 
-    # SBOM klasöründen en son yüklenen dosyayı bul
-    sbom_files = os.listdir(app.config['UPLOAD_FOLDER'])
-    if not sbom_files:
-        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
-    latest_sbom = sorted(
-        sbom_files,
-        key=lambda f: os.path.getctime(os.path.join(app.config['UPLOAD_FOLDER'], f))
-    )[-1]
-    sbom_path = os.path.join(app.config['UPLOAD_FOLDER'], latest_sbom)
-
-    if request.method == 'POST':
-        # 1) Parse SBOM & CVE tarama
-        comps = parse_sbom(sbom_path)
+    if request.method == "POST":
+        comps = parse_sbom(latest_path)
         vulns = scan_vulnerabilities(comps)
-        score = int((1 - len({v['component'] for v in vulns}) / len(comps)) * 100) if comps else 0
+        score = int((1 - len({v["component"] for v in vulns})/len(comps)) * 100) if comps else 0
 
-        # 2) ReportLab ile PDF oluştur ve kaydet
-        pdf_filename = f'report_{user}_{int(time.time())}.pdf'
-        pdf_path = os.path.join(app.config['REPORT_FOLDER'], pdf_filename)
-
-        c = canvas.Canvas(pdf_path, pagesize=A4)
-        width, height = A4
-
-        # Başlık ve meta
-        c.setFont("Helvetica-Bold", 16)
-        c.drawCentredString(width/2, height - 50, "CRA SBOM Analiz Raporu")
-        c.setFont("Helvetica", 10)
-        c.drawString(50, height - 80, f"Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        c.drawString(50, height - 95, f"SBOM: {latest_sbom}")
-        c.drawString(50, height - 110, f"Toplam Bilesen: {len(comps)}, Zafiyet: {len(vulns)}, Skor: {score}%")
-
-        # Zafiyet detayları tablosu
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, height - 140, "Zafiyet Detaylari:")
-        y = height - 160
+        pdf_fn = f"report_{session['user']}_{int(time.time())}.pdf"
+        pdf_p  = os.path.join(app.config["REPORT_FOLDER"], pdf_fn)
+        c = canvas.Canvas(pdf_p, pagesize=A4)
+        w,h = A4
+        c.setFont("Helvetica-Bold",16)
+        c.drawCentredString(w/2, h-50, "CRA SBOM Analiz Raporu")
+        c.setFont("Helvetica",10)
+        c.drawString(50, h-80, f"Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        c.drawString(50, h-95, f"SBOM: {os.path.basename(latest_path)}")
+        c.drawString(50, h-110, f"Bileşen: {len(comps)}, Zafiyet: {len(vulns)}, Skor: {score}%")
+        y = h-140
         c.setFont("Helvetica", 9)
-        c.drawString(50, y, "Bilesen")
-        c.drawString(200, y, "CVE ID")
-        c.drawString(300, y, "Açiklama")
-        y -= 15
         for v in vulns:
             if y < 50:
-                c.showPage()
-                y = height - 50
-            c.drawString(50, y, v['component'][:20])
-            c.drawString(200, y, v['cve'])
-            c.drawString(300, y, v['desc'][:60])
+                c.showPage(); y = h-50
+            c.drawString(50, y, v["component"][:20])
+            c.drawString(200, y, v["cve"])
+            c.drawString(300, y, v["desc"][:60])
             y -= 12
-
         c.save()
 
-        # Log kaydı ve geri dönüş JSON
-        record_log(user, f'report_generated {pdf_filename}')
+        record_log(session["user"], f"report_generated {pdf_fn}")
         entry = {
-            'user': user,
-            'date': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'sbom': latest_sbom,
-            'score': score,
-            'file': pdf_filename
+            "user": session["user"],
+            "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "sbom": os.path.basename(latest_path),
+            "score": score,
+            "file": pdf_fn
         }
         REPORTS.append(entry)
         return jsonify(entry), 201
 
-    # GET: sadece o kullanıcıya ait raporları döndür
-    user_reports = [r for r in REPORTS if r['user'] == user]
-    return jsonify(user_reports)
+    return jsonify([r for r in REPORTS if r["user"]==session["user"]])
 
-if __name__ == '__main__':
+
+# ─── Products ─────────────────────────────────────────────────────────────────
+
+@app.route("/products", methods=["GET"])
+def products():
+    if "user" not in session:
+        return jsonify([]), 401
+    prods = Product.query.filter_by(user=session["user"]).all()
+    return jsonify([
+        {
+            "id":         p.id,
+            "brand":      p.brand,
+            "model":      p.model,
+            "version":    p.version,
+            "sbom_path":  p.sbom_path,
+            "created":    p.created.isoformat()
+        } for p in prods
+    ])
+
+@app.route("/products/new", methods=["POST"])
+def products_new():
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+    f = request.files.get("sbom")
+    fn = secure_filename(f"{int(time.time())}_{f.filename}")
+    f.save(os.path.join(app.config["UPLOAD_FOLDER"], fn))
+    p = Product(
+        user      = session["user"],
+        brand     = request.form["brand"],
+        model     = request.form["model"],
+        version   = request.form["version"],
+        sbom_path = fn
+    )
+    db.session.add(p)
+    db.session.commit()
+    return ("", 204)
+
+@app.route("/products/delete/<int:product_id>", methods=["POST"])
+def delete_product(product_id):
+    if "user" not in session:
+        return jsonify({"error":"Yetkisiz"}), 401
+
+    prod = Product.query.filter_by(id=product_id, user=session["user"]).first()
+    if prod:
+        # 1) Fiziksel dosyayı sil
+        try:
+            os.remove(os.path.join(app.config["UPLOAD_FOLDER"], prod.sbom_path))
+        except OSError:
+            pass
+
+        # 2) Veritabanından sil ve commit
+        db.session.delete(prod)
+        db.session.commit()
+
+        # 3) Kalan kayıtları yeniden numaralandır
+        #    - Önce sayaç değişkenini başlat
+        db.session.execute(text("SET @i := 0"))
+        #    - Ardından created zamanına göre sıralı şekilde id'leri yeniden ata
+        db.session.execute(text("""
+            UPDATE products
+            SET id = (@i := @i + 1)
+            ORDER BY created
+        """))
+        # 4) AUTO_INCREMENT'ı son numaradan bir fazlası olarak ayarla
+        db.session.execute(text("ALTER TABLE products AUTO_INCREMENT = 1"))
+        db.session.commit()
+
+    # 5) AJAX için boş 204 dön
+    return ("", 204)
+
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    # Uygulama bağlamında tabloları oluştur
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)

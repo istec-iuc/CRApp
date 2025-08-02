@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRA SBOM Analyzer</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+    body { height: 100vh; overflow: hidden; }
+    .sidebar {
+      background-color: #343a40;
+      color: #fff;
+      height: 100%;
+    }
+    .sidebar .nav-link {
+      color: #adb5bd;
+    }
+    .sidebar .nav-link.active {
+      background-color: #495057;
+      color: #fff;
+    }
+    .content {
+      height: 100%;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid h-100">
+    <div class="row h-100">
+      <!-- Sidebar -->
+      <nav class="col-2 sidebar d-flex flex-column p-3">
+        <h4 class="text-white">CRA Analyzer</h4>
+        <ul class="nav nav-pills flex-column mb-auto">
+          <li class="nav-item">
+            <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint=='index' %}active{% endif %}">
+              Dashboard
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('list_products') }}" class="nav-link {% if request.endpoint=='list_products' %}active{% endif %}">
+              Ürünler
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('add_product') }}" class="nav-link {% if request.endpoint=='add_product' %}active{% endif %}">
+              Ürün Ekle
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('logout') }}" class="nav-link">
+              Çıkış
+            </a>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="col-10 content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
