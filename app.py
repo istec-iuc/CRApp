@@ -9,6 +9,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
+import pymysql
 from sbom_parser import parse_sbom
 from vulnerability_scanner import scan_vulnerabilities
 from version_checker import check_version
@@ -157,7 +158,7 @@ def scan_cve_offline():
     #cve_data = load_cve_database()
     #print('LOADED CVE DATABASE. Start scanning')
     results = scan_vulnerabilities_offline(components)
-    print('ENG OF SCANNING')
+    
     return jsonify(results)
 
 @app.route("/last-updated", methods=["GET"])
@@ -169,6 +170,7 @@ def get_last_updated():
         with open("last_updated.txt", "r") as f:
             timestamp = f.read().strip()
     except FileNotFoundError:
+        # File not found — assume never updated
         timestamp = "Hiç güncellenmedi"
     return jsonify({"timestamp": timestamp})
 
@@ -191,7 +193,6 @@ def update_cve():
             "message": "CVE data updated successfully.",
             "timestamp": timestamp  # Return timestamp to JS too
         })
-        return jsonify({"status": "success", "message": "CVE data updated successfully."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
