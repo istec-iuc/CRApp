@@ -1,6 +1,7 @@
 # app.py
 import os
 import time
+import traceback
 from io import BytesIO
 from flask import (
     Flask, render_template, request, redirect,
@@ -405,7 +406,6 @@ def reports():
                 print("Offline detected: falling back to offline scan")
                 vulns = scan_vulnerabilities_offline(comps)
   
-            score_CVE = int((1 - len({v["component"] for v in vulns}) / len(comps)) * 100) if comps else 0
 
             # c) PDF Raporu Oluştur
             pdf_fn = f"report_{session['user']}_{int(time.time())}.pdf"
