@@ -16,10 +16,12 @@ from version_checker import check_version
 from cra_rule_checker import run_cra_checks
 from offline_vulnerability_scanner import scan_vulnerabilities_offline, load_cve_database
 from update_vulnerability_scanner import download_and_extract_latest_cve_files
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-import traceback
+import socket
+
 
 # ─── App & Config ──────────────────────────────────────────────────────────────
 
@@ -38,9 +40,7 @@ DB_PASSWORD = "StrongPassw0rd!"
 DB_HOST     = "localhost"
 DB_NAME     = "cra_analyzer"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
-)
+app.config["SQLALCHEMY_DATABASE_URI"] = (f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # SQLAlchemy ORM nesnesi
@@ -58,6 +58,17 @@ class Product(db.Model):
     sbom_path = db.Column(db.String(256), nullable=False)
     created   = db.Column(db.DateTime,    server_default=db.func.now())
 
+#Store CVEs
+class Vulnerability(db.Model):
+    __tablename__ = "vulnerabilities"
+    
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    component   = db.Column(db.String(255), nullable=False)
+    cve_id      = db.Column(db.String(64), nullable=False)
+    cvss        = db.Column(db.Float, nullable=True)
+    description = db.Column(db.Text, nullable=False)
+    scanned_at  = db.Column(db.DateTime, server_default=db.func.now())
+
 
 # ─── In‐Memory Stores & Utils ─────────────────────────────────────────────────
 
@@ -72,6 +83,17 @@ def record_log(user, action):
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "action":    action
     })
+
+# ---Helper Function -------------
+# Check if we can do online or offline cve scan (Depending on the result we'll use either for pdf generation)
+def is_online(host="8.8.8.8", port=53, timeout=3):
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except socket.error as ex:
+        print(f"[WARN] No internet connection: {ex}")
+        return False
 
 
 # ─── Auth Routes ───────────────────────────────────────────────────────────────
@@ -129,38 +151,79 @@ def upload_sbom():
     comps = parse_sbom(path)
     return jsonify(comps[:50])
 
+#Returns the list of all uploaded files
+@app.route("/list-sboms", methods=["GET"])
+def list_sboms():
+    if "user" not in session:
+        return jsonify({"error": "Yetkisiz"}), 401
+    
+    allowed_exts = {'.json', '.xml'}
+    files = [
+        f for f in os.listdir(app.config["UPLOAD_FOLDER"])
+        if not f.startswith('.') and os.path.splitext(f)[1].lower() in allowed_exts
+    ]
+
+    #HOW DO I MAKE IT TAKE THEM FROM THE DATABASE?
+    #files = os.listdir(app.config["UPLOAD_FOLDER"])
+    files = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)), reverse=True)
+
+    return jsonify(files)
+
+
 @app.route('/scan-online', methods=['POST'])
 def scan_cve():
     if "user" not in session:
         return jsonify({"error":"Yetkisiz"}), 401
+    
+    data = request.get_json()
+    selected_file = data.get("filename") if data else None
+
     files = os.listdir(app.config["UPLOAD_FOLDER"])
     if not files:
         return jsonify({"error":"Önce SBOM yükleyin"}), 400
-    latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1]
-    comps  = parse_sbom(os.path.join(app.config["UPLOAD_FOLDER"], latest))
+    
+    if selected_file and selected_file in files:
+        path = os.path.join(app.config["UPLOAD_FOLDER"], selected_file)
+    else:
+        # Fallback: use latest file
+        latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1]
+        path = os.path.join(app.config["UPLOAD_FOLDER"], latest)
+
+    print("USED FILE:")
+    print(selected_file)
+
+    comps = parse_sbom(path)
     results = scan_vulnerabilities(comps)
     return jsonify(results)
+
 
 @app.route('/scan-offline', methods=['POST'])
 def scan_cve_offline():
     if 'user' not in session:
         return jsonify({'error': 'Yetkisiz'}), 401
-
-    files = os.listdir(app.config['UPLOAD_FOLDER'])
-    if not files:
-        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
-
-    latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config['UPLOAD_FOLDER'], f)))[-1]
-    path = os.path.join(app.config['UPLOAD_FOLDER'], latest)
-    components = parse_sbom(path)
-
-    #print('Loading CVE database')
-    #cve_data = load_cve_database()
-    #print('LOADED CVE DATABASE. Start scanning')
-    results = scan_vulnerabilities_offline(components)
     
+    data = request.get_json()
+    selected_file = data.get("filename") if data else None
+
+    files = os.listdir(app.config["UPLOAD_FOLDER"])
+    if not files:
+        return jsonify({"error":"Önce SBOM yükleyin"}), 400
+    
+    if selected_file and selected_file in files:
+        path = os.path.join(app.config["UPLOAD_FOLDER"], selected_file)
+    else:
+        # Fallback: use latest file
+        latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1]
+        path = os.path.join(app.config["UPLOAD_FOLDER"], latest)
+
+    print("USED FILE:")
+    print(selected_file)
+
+    comps = parse_sbom(path)
+    results = scan_vulnerabilities_offline(comps)
     return jsonify(results)
 
+#Display the last updated timestamp of CVEs on open
 @app.route("/last-updated", methods=["GET"])
 def get_last_updated():
     if 'user' not in session:
@@ -174,13 +237,32 @@ def get_last_updated():
         timestamp = "Hiç güncellenmedi"
     return jsonify({"timestamp": timestamp})
 
-
+#Updating the CVE database
 @app.route("/update-cve", methods=["POST"])
 def update_cve():
     if 'user' not in session:
             return jsonify({'error': 'Yetkisiz'}), 401
 
     try:
+        # Check if file exists
+        last_updated_path = "last_updated.txt"
+        if os.path.exists(last_updated_path):
+            with open(last_updated_path, "r") as f:
+                last_updated_str = f.read().strip()
+                last_updated = datetime.strptime(last_updated_str, "%Y-%m-%d %H:%M:%S UTC")
+                last_updated = last_updated.replace(tzinfo=timezone.utc)
+
+                now = datetime.now(timezone.utc)
+                delta = now - last_updated
+
+                #CHANGE TO hours=2
+                if delta < timedelta(seconds=10):
+                    return jsonify({
+                        "status": "skipped",
+                        "message": f"Already updated less than 2 hours ago ({last_updated_str})."
+                    })
+                
+        # Proceed with update
         download_and_extract_latest_cve_files()
 
         # Save the timestamp
@@ -197,31 +279,61 @@ def update_cve():
         return jsonify({"status": "error", "message": str(e)})
 
 
-@app.route('/version-check', methods=['GET'])
+@app.route('/version-check', methods=['GET', "POST"])
 def version_check():
     if "user" not in session:
         return jsonify({"error":"Yetkisiz"}), 401
+
+    data = request.get_json()
+    selected_file = data.get("filename") if data else None
+
     files = os.listdir(app.config["UPLOAD_FOLDER"])
     if not files:
         return jsonify({"error":"Önce SBOM yükleyin"}), 400
-    latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
-                    sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
-    comps  = parse_sbom(latest_path)
-    res    = check_version(comps)
-    record_log(session["user"], "Versiyon kontrolü yapıldı")
-    return jsonify(res)
+    
+    if selected_file and selected_file in files:
+        path = os.path.join(app.config["UPLOAD_FOLDER"], selected_file)
+    else:
+        # Fallback: use latest file
+        latest = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1]
+        path = os.path.join(app.config["UPLOAD_FOLDER"], latest)
 
-@app.route("/score")
+    #Debugging
+    print("USED FILE:")
+    print(selected_file)
+
+    comps = parse_sbom(path)
+    results = check_version(comps)
+    record_log(session["user"], "Versiyon kontrolü yapıldı")
+    return jsonify(results)
+
+
+@app.route("/score", methods=["POST"])
 def cra_score():
     if "user" not in session:
         return jsonify({"error":"Yetkisiz"}), 401
+    
+    data = request.get_json()
+    filename = data.get("filename")
+
+    if not filename:
+        return jsonify({"error":"Dosya adı gerekli"}), 400
+
+    path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+
+    if not os.path.exists(path):
+        return jsonify({"error": "Dosya bulunamadı"}), 404
+
+    res = run_cra_checks(path)
+    record_log(session["user"], "CRA skoru hesaplandı")
+    return jsonify(res)
+
     files = os.listdir(app.config["UPLOAD_FOLDER"])
     if not files:
         return jsonify({"error":"Önce SBOM yükleyin"}), 400
     latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
                     sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
     res    = run_cra_checks(latest_path)
-    record_log(session["user"], "CRA skoru hesaplandı")
     return jsonify(res)
 
 
@@ -258,51 +370,59 @@ def logs():
 def report_file(filename):
     return send_from_directory(app.config["REPORT_FOLDER"], filename, as_attachment=True)
 
-@app.route('/reports', methods=['GET', 'POST'])
+@app.route("/reports", methods=["GET", "POST"])
 def reports():
-    user = session.get('user')
-    if not user:
-        return jsonify({'error': 'Yetkisiz'}), 401
+    if "user" not in session:
+        return jsonify({"error": "Yetkisiz"}), 401
 
-    # 1) En son yüklenen SBOM dosyasını bul
-    uploads = app.config['UPLOAD_FOLDER']
-    sbom_files = os.listdir(uploads)
-    if not sbom_files:
-        return jsonify({'error': 'Önce SBOM yükleyin'}), 400
-
-    latest_sbom = sorted(
-        sbom_files,
-        key=lambda f: os.path.getctime(os.path.join(uploads, f))
-    )[-1]
-    sbom_path = os.path.join(uploads, latest_sbom)
-
-    if request.method == 'POST':
+    if request.method == "POST":
         try:
+            data = request.get_json()
+            filename = data.get("filename")
+
+            if not filename:
+                return jsonify({"error": "Dosya adı gerekli"}), 400
+
+            path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            if not os.path.exists(path):
+                return jsonify({"error": "Dosya bulunamadı"}), 404
+
+            print("USED FILE:")
+            print(filename)
+
+            comps = parse_sbom(path)
+
             # a) CRA uyumluluk kontrolü
-            cra_result = run_cra_checks(sbom_path)
+            cra_result = run_cra_checks(path)
             score     = cra_result.get('score', 0)
             criteria  = cra_result.get('criteria', [])
 
-            # b) CVE taraması
-            comps = parse_sbom(sbom_path)
-            vulns = scan_vulnerabilities(comps)
+            # b) CVE taraması (online / offline)
+            if is_online():
+                print("Online detected: using live CVE scanner")
+                vulns = scan_vulnerabilities(comps)
+            else:
+                print("Offline detected: falling back to offline scan")
+                vulns = scan_vulnerabilities_offline(comps)
+  
+            score_CVE = int((1 - len({v["component"] for v in vulns}) / len(comps)) * 100) if comps else 0
 
-            # c) PDF oluşturma
-            pdf_filename = f'report_{user}_{int(time.time())}.pdf'
-            pdf_path     = os.path.join(app.config['REPORT_FOLDER'], pdf_filename)
-            c = canvas.Canvas(pdf_path, pagesize=A4)
-            width, height = A4
+            # c) PDF Raporu Oluştur
+            pdf_fn = f"report_{session['user']}_{int(time.time())}.pdf"
+            pdf_p = os.path.join(app.config["REPORT_FOLDER"], pdf_fn)
+            c = canvas.Canvas(pdf_p, pagesize=A4)
+            w, h = A4
 
             # --- Başlık & Meta ---
             c.setFont("Helvetica-Bold", 16)
-            c.drawCentredString(width/2, height - 50, "CRA SBOM Analiz Raporu")
+            c.drawCentredString(w / 2, h - 50, "CRA SBOM Analiz Raporu")
             c.setFont("Helvetica", 10)
-            c.drawString(50, height - 80, f"Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-            c.drawString(50, height - 95, f"SBOM: {latest_sbom}")
-            c.drawString(50, height - 110, f"CRA Uyum Skoru: {score}%")
+            c.drawString(50, h - 80, f"Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            c.drawString(50, h - 95, f"SBOM: {os.path.basename(path)}")
+            c.drawString(50, h - 110, f"Bileşen: {len(comps)}, Zafiyet: {len(vulns)}, Skor: {score}%")
 
             # --- Kriterler ---
-            y = height - 130
+            y = h - 130
             c.setFont("Helvetica-Bold", 12)
             c.drawString(50, y, "Kriterler:")
             c.setFont("Helvetica", 9)
@@ -314,26 +434,20 @@ def reports():
                           else f"{val}%")
                 c.drawString(60, y, f"- {crit['name']}: {status}")
 
-            # --- CVE Detayları ---
-            y -= 24
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(50, y, "CVE Detayları:")
-            y -= 16
-
-            # Tablo başlık
+            # --- Tablo Başlık ---
+            y -= 20
             c.setFont("Helvetica-Bold", 10)
             c.drawString(50, y,  "Bileşen")
             c.drawString(200, y, "CVE ID")
             c.drawString(300, y, "CVSS")
             c.drawString(350, y, "Açıklama")
             y -= 12
-
             c.setFont("Helvetica", 9)
+
             for v in vulns:
-                # Yeni sayfa gerekiyorsa
                 if y < 50:
                     c.showPage()
-                    y = height - 50
+                    y = h - 50
                     c.setFont("Helvetica-Bold", 10)
                     c.drawString(50, y,  "Bileşen")
                     c.drawString(200, y, "CVE ID")
@@ -350,27 +464,28 @@ def reports():
 
             c.save()
 
-            # d) Log kaydı ve JSON cevabı
-            record_log(user, f'report_generated {pdf_filename}')
+            # d) Log & JSON Response
+            record_log(session["user"], f"report_generated {pdf_fn}")
             entry = {
-                'user':     user,
-                'date':     time.strftime('%Y-%m-%d %H:%M:%S'),
-                'sbom':     latest_sbom,
-                'score':    score,
-                'criteria': criteria,
-                'cves':     vulns,
-                'file':     pdf_filename
+                "user": session["user"],
+                "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "sbom": os.path.basename(path),
+                "score": score,
+                "criteria": criteria,
+                "cves": vulns,
+                "file": pdf_fn
             }
             REPORTS.append(entry)
             return jsonify(entry), 201
 
         except Exception:
             app.logger.error("Rapor oluşturma hatası:\n" + traceback.format_exc())
-            return jsonify({'error': 'Rapor oluşturulurken hata oluştu'}), 500
+            return jsonify({"error": "Rapor oluşturulurken hata oluştu"}), 500
 
-    # GET: o kullanıcıya ait mevcut raporları döndür
-    user_reports = [r for r in REPORTS if r['user'] == user]
+    # GET method: kullanıcının raporlarını döndür
+    user_reports = [r for r in REPORTS if r["user"] == session["user"]]
     return jsonify(user_reports)
+
 # ─── Products ─────────────────────────────────────────────────────────────────
 
 @app.route("/products", methods=["GET"])

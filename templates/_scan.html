@@ -1,10 +1,19 @@
 <!-- File: templates/_scan.html -->
 <div class="tab-pane fade" id="tab-scan">
     <h4>CVE Tarama</h4>
+    <!-- ComboBox: SBOM Seç -->
+    <div class="form-group mb-3">
+      <label for="sbomSelector-cve">SBOM Dosyası Seçin:</label>
+      <select id="sbomSelector-cve" class="sbomSelector form-select">
+        <!-- Options will be populated dynamically -->
+      </select>
+    </div>
+
+    <!-- Scan Buttons -->
     <button class="btn-outline-primary btn" id="scanBtnOnline">Taramayı Başlat</button>
-    <!--Yeni Butonlar -->
     <button class="btn btn-outline-secondary" id="scanBtnOffline">Çevrimdışı Tarama</button>
     <button class="btn btn-outline-warning" id="cveUpdateBtn">CVE Veritabanını Güncelle</button>
+
     <!--Son Güncelleme Metni -->
     <div class="text-muted">
       Son CVE güncellemesi: <span id="last-updated">2025-07-30</span>

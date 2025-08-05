@@ -1,1 +1,12 @@
 /venv
+cveOffline/CVE-recent.json.xz
+cveOffline/CVE-all.json.xz
+cveOffline/CVE-modified.json.xz
+cveOffline/CVE-recent.json
+cveOffline/CVE-all.json
+cveOffline/CVE-modified.json
+/uploads
+
+/venv
+
+/reports
