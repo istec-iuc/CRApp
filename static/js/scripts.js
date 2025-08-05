@@ -19,6 +19,9 @@ window.addEventListener('DOMContentLoaded', () => {
           row.innerHTML = `<td>${item.component}</td><td>${item.version}</td>`;
           tbody.appendChild(row);
         });
+
+        //Updating the comboboxes
+        await loadSbomList();
       } catch (err) {
         console.error(err);
         alert('Yükleme hatası');
@@ -32,9 +35,39 @@ window.addEventListener('DOMContentLoaded', () => {
   const scanBtnOffline = document.getElementById("scanBtnOffline");
   const scanUpdateBtn = document.getElementById('cveUpdateBtn');
 
-  //ONLINE CVE Scan
-  if (scanBtnOnline) {
-    scanBtnOnline.addEventListener('click', async () => {
+
+  //Load the SBOM options
+  async function loadSbomList() {
+  try {
+    const res = await fetch("/list-sboms");
+    const files = await res.json();
+
+   // Select all <select> elements with class "sbomSelector"
+    const sbomSelectors = document.querySelectorAll(".sbomSelector");
+
+    sbomSelectors.forEach(sbomSelector => {
+      sbomSelector.innerHTML = ""; // Clear existing options
+
+      files.forEach(file => {
+        const option = document.createElement("option");
+        option.value = file;
+        option.textContent = file;
+        sbomSelector.appendChild(option);
+      });
+    });
+  } catch (err) {
+    console.error("SBOM listesi alınamadı:", err);
+  }
+}
+
+loadSbomList();
+
+
+
+//ONLINE CVE Scan
+if (scanBtnOnline) {
+  scanBtnOnline.addEventListener('click', async () => {
+        const selectedFile = document.getElementById("sbomSelector-cve").value;
         scanBtnOnline.disabled = true;
         scanBtnOnline.textContent = 'Taraniyor...';
 
@@ -49,7 +82,15 @@ window.addEventListener('DOMContentLoaded', () => {
       scanLog.innerHTML = '';
       scanTableBody.innerHTML = '';
       try {
-        const res = await fetch('/scan-online', { method: 'POST' });
+        //const res = await fetch('/scan-online', { method: 'POST' });
+        const res = await fetch('/scan-online', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ filename: selectedFile })
+        });
+
         let progress = 0;
         const timer = setInterval(() => {
           progress = Math.min(progress + 20, 100);
@@ -80,9 +121,16 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function sanitize(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
   //OFFLINE CVE Scan
   if (scanBtnOffline) {
     scanBtnOffline.addEventListener('click', async () => {
+      const selectedFile = document.getElementById("sbomSelector-cve").value;
       scanBtnOffline.disabled = true;
       scanBtnOffline.textContent = 'Taraniyor...';
 
@@ -97,8 +145,14 @@ window.addEventListener('DOMContentLoaded', () => {
       scanLog.innerHTML = '';
       scanTableBody.innerHTML = '';
       try {
-        //NEEDS MORE ATTENTION
-        const res = await fetch('/scan-offline', { method: 'POST' });
+        //const res = await fetch('/scan-offline', { method: 'POST' });
+        const res = await fetch('/scan-offline', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ filename: selectedFile })
+        });
         let progress = 0;
         const timer = setInterval(() => {
           progress = Math.min(progress + 20, 100);
@@ -110,9 +164,17 @@ window.addEventListener('DOMContentLoaded', () => {
         clearInterval(timer);
         progressBar.style.width = '100%';
         scanLog.innerHTML += `✔ Tarama tamamlandı<br>`;
-        results.forEach(item => {
+        //DISPLAYS only 50 of them -> If they're too many - Google crashes
+        (results.slice(0, 50)).forEach(item => {
           const row = document.createElement('tr');
-          row.innerHTML = `<td>${item.component}</td><td>${item.cve}</td><td>${item.cvss}</td><td>${item.desc}</td>`;
+          //row.innerHTML = `<td>${item.component}</td><td>${item.cve}</td><td>${item.cvss}</td><td>${item.desc}</td>`;
+          row.innerHTML = `
+            <td>${sanitize(item.component)}</td>
+            <td>${sanitize(item.cve)}</td>
+            <td>${sanitize(item.cvss)}</td>
+            <td>${sanitize(item.desc)}</td>
+          `;
+
           scanTableBody.appendChild(row);
         });
       } catch (e) {
@@ -183,11 +245,19 @@ updateLastUpdatedDisplay();
   const versionBtn = document.getElementById('versionBtn');
   if (versionBtn) {
     versionBtn.addEventListener('click', async () => {
+      const selectedFile = document.getElementById("sbomSelector-version").value;
       versionBtn.disabled = true;
       versionBtn.textContent = 'Kontrol ediliyor...';
 
       try {
-        const res = await fetch('/version-check');
+        //const res = await fetch('/version-check');
+        const res = await fetch('/version-check', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ filename: selectedFile })
+        });
         const data = await res.json();
         const tbody = document.querySelector('#versionTable tbody');
         tbody.innerHTML = '';
@@ -216,11 +286,19 @@ updateLastUpdatedDisplay();
   const scoreBtn = document.getElementById('scoreBtn');
   if (scoreBtn) {
     scoreBtn.addEventListener('click', async () => {
+      const selectedFile = document.getElementById("sbomSelector-cra").value;
       scoreBtn.disabled = true;
       scoreBtn.textContent = 'Hesaplanıyor...';
 
       try {
-        const res = await fetch('/score');
+        //const res = await fetch('/score');
+        const res = await fetch('/score', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ filename: selectedFile })
+        });
         const json = await res.json();
         document.getElementById('gauge').textContent = `${json.score}%`;
         const list = document.getElementById('criteriaList');
@@ -334,11 +412,20 @@ updateLastUpdatedDisplay();
   const reportBtn = document.getElementById('generateReportBtn');
   if (reportBtn) {
     reportBtn.addEventListener('click', async () => {
+      const selectedFile = document.getElementById("sbomSelector-report").value;
+
       reportBtn.disabled = true;
       reportBtn.textContent = 'Oluşturuluyor...';
       try {
         // PDF indirme yerine JSON entry al
-        const res = await fetch('/reports', { method: 'POST' });
+        //const res = await fetch('/reports', { method: 'POST' });
+        const res = await fetch('/reports', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ filename: selectedFile })
+        });
         if (!res.ok) throw new Error();
         // Tabloyu güncelle
         await loadReports();
@@ -435,6 +522,10 @@ updateLastUpdatedDisplay();
   
     // 3) Sekme geçişini bekle ve listeyi yükle
     productsTabBtn.addEventListener('shown.bs.tab', loadProducts, { once: true });
+
+    // 4) Update comboboxes
+    //Updating the comboboxes
+    await loadSbomList();
   });
   
   // “Ürünler” sekmesi aktif olduğunda da listeyi yüklesin

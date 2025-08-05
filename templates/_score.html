@@ -1,6 +1,13 @@
 <!-- File: templates/_score.html -->
 <div class="tab-pane fade" id="tab-score">
     <h4>CRA Uyum Skoru</h4>
+    <!-- ComboBox: SBOM Seç -->
+    <div class="form-group mb-3">
+      <label for="sbomSelector-cra">SBOM Dosyası Seçin:</label>
+      <select id="sbomSelector-cra" class="sbomSelector form-select">
+        <!-- Options will be populated dynamically -->
+      </select>
+    </div>
     <button id="scoreBtn" class="btn btn-outline-success mb-3">Skoru Hesapla</button>
     <div class="d-flex justify-content-center mb-4">
       <div id="gauge" class="gauge display-4">--%</div>

@@ -7,3 +7,6 @@ cveOffline/CVE-all.json
 cveOffline/CVE-modified.json
 /uploads
 
+/venv
+
+/reports

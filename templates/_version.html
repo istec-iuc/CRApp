@@ -1,6 +1,14 @@
 <!-- File: templates/_version.html -->
 <div class="tab-pane fade" id="tab-version">
     <h4>Versiyon ve Güncellik Kontrolü</h4>
+    <!-- ComboBox: SBOM Seç -->
+    <div class="form-group mb-3">
+    <label for="sbomSelector-version">SBOM Dosyası Seçin:</label>
+    <select id="sbomSelector-version" class="sbomSelector form-select">
+      <!-- Options will be populated dynamically -->
+    </select>
+
+  </div>
     <button id="versionBtn" class="btn btn-outline-primary mb-3">Versiyon Kontrol Et</button>
     <table id="versionTable" class="table table-sm table-bordered mb-3">
       <thead>

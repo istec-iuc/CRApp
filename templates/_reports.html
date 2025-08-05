@@ -1,5 +1,12 @@
 <div class="tab-pane fade" id="tab-reports">
   <h4>Raporlar</h4>
+      <!-- ComboBox: SBOM Seç -->
+    <div class="form-group mb-3">
+      <label for="sbomSelector-report">SBOM Dosyası Seçin:</label>
+      <select id="sbomSelector-report" class="sbomSelector form-select">
+        <!-- Options will be populated dynamically -->
+      </select>
+    </div>
   <button id="generateReportBtn" class="btn btn-outline-primary mb-3">Rapor Oluştur</button>
   <table id="reportsTable" class="table table-sm table-striped">
     <thead>
