@@ -16,7 +16,7 @@ from version_checker import check_version
 from cra_rule_checker import run_cra_checks
 from offline_vulnerability_scanner import scan_vulnerabilities_offline, load_cve_database
 from update_vulnerability_scanner import download_and_extract_latest_cve_files
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -38,9 +38,7 @@ DB_PASSWORD = "StrongPassw0rd!"
 DB_HOST     = "localhost"
 DB_NAME     = "cra_analyzer"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
-)
+app.config["SQLALCHEMY_DATABASE_URI"] = (f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # SQLAlchemy ORM nesnesi
@@ -57,6 +55,17 @@ class Product(db.Model):
     version   = db.Column(db.String(64),  nullable=False)
     sbom_path = db.Column(db.String(256), nullable=False)
     created   = db.Column(db.DateTime,    server_default=db.func.now())
+
+#Store CVEs
+class Vulnerability(db.Model):
+    __tablename__ = "vulnerabilities"
+    
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    component   = db.Column(db.String(255), nullable=False)
+    cve_id      = db.Column(db.String(64), nullable=False)
+    cvss        = db.Column(db.Float, nullable=True)
+    description = db.Column(db.Text, nullable=False)
+    scanned_at  = db.Column(db.DateTime, server_default=db.func.now())
 
 
 # ─── In‐Memory Stores & Utils ─────────────────────────────────────────────────
@@ -161,6 +170,7 @@ def scan_cve_offline():
     
     return jsonify(results)
 
+#Display the last updated timestamp of CVEs on open
 @app.route("/last-updated", methods=["GET"])
 def get_last_updated():
     if 'user' not in session:
@@ -174,13 +184,32 @@ def get_last_updated():
         timestamp = "Hiç güncellenmedi"
     return jsonify({"timestamp": timestamp})
 
-
+#Updating the CVE database
 @app.route("/update-cve", methods=["POST"])
 def update_cve():
     if 'user' not in session:
             return jsonify({'error': 'Yetkisiz'}), 401
 
     try:
+        # Check if file exists
+        last_updated_path = "last_updated.txt"
+        if os.path.exists(last_updated_path):
+            with open(last_updated_path, "r") as f:
+                last_updated_str = f.read().strip()
+                last_updated = datetime.strptime(last_updated_str, "%Y-%m-%d %H:%M:%S UTC")
+                last_updated = last_updated.replace(tzinfo=timezone.utc)
+
+                now = datetime.now(timezone.utc)
+                delta = now - last_updated
+
+                #CHANGE TO hours=2
+                if delta < timedelta(seconds=10):
+                    return jsonify({
+                        "status": "skipped",
+                        "message": f"Already updated less than 2 hours ago ({last_updated_str})."
+                    })
+                
+        # Proceed with update
         download_and_extract_latest_cve_files()
 
         # Save the timestamp
