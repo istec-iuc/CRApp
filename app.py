@@ -22,6 +22,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import socket
 
+
 # ─── App & Config ──────────────────────────────────────────────────────────────
 
 app = Flask(__name__, template_folder="templates")
@@ -369,73 +370,121 @@ def logs():
 def report_file(filename):
     return send_from_directory(app.config["REPORT_FOLDER"], filename, as_attachment=True)
 
-@app.route("/reports", methods=["GET","POST"])
+@app.route("/reports", methods=["GET", "POST"])
 def reports():
     if "user" not in session:
-        return jsonify({"error":"Yetkisiz"}), 401
-    
+        return jsonify({"error": "Yetkisiz"}), 401
 
     if request.method == "POST":
-        data = request.get_json()
-        filename = data.get("filename")
+        try:
+            data = request.get_json()
+            filename = data.get("filename")
 
-        if not filename:
-            return jsonify({"error":"Dosya adı gerekli"}), 400
+            if not filename:
+                return jsonify({"error": "Dosya adı gerekli"}), 400
 
-        path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            if not os.path.exists(path):
+                return jsonify({"error": "Dosya bulunamadı"}), 404
 
-        if not os.path.exists(path):
-            return jsonify({"error": "Dosya bulunamadı"}), 404
-        
-        print("USED FILE:")
-        print(filename)
-        comps = parse_sbom(path)
-        #THAT'S ONLY ONLINE - NEEDS TO CHANGE
-        #vulns = scan_vulnerabilities(comps)
+            print("USED FILE:")
+            print(filename)
 
-        if is_online():
-            print("Online detected: using live CVE scanner")
-            vulns = scan_vulnerabilities(comps)  # Online scanner
-        else:
-            print("Offline detected: falling back to offline scan")
-            vulns = scan_vulnerabilities_offline(comps) # Offline scanner
+            comps = parse_sbom(path)
 
-        score = int((1 - len({v["component"] for v in vulns})/len(comps)) * 100) if comps else 0
+            # a) CRA uyumluluk kontrolü
+            cra_result = run_cra_checks(path)
+            score     = cra_result.get('score', 0)
+            criteria  = cra_result.get('criteria', [])
 
-        pdf_fn = f"report_{session['user']}_{int(time.time())}.pdf"
-        pdf_p  = os.path.join(app.config["REPORT_FOLDER"], pdf_fn)
-        c = canvas.Canvas(pdf_p, pagesize=A4)
-        w,h = A4
-        c.setFont("Helvetica-Bold",16)
-        c.drawCentredString(w/2, h-50, "CRA SBOM Analiz Raporu")
-        c.setFont("Helvetica",10)
-        c.drawString(50, h-80, f"Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        c.drawString(50, h-95, f"SBOM: {os.path.basename(path)}")
-        c.drawString(50, h-110, f"Bileşen: {len(comps)}, Zafiyet: {len(vulns)}, Skor: {score}%")
-        y = h-140
-        c.setFont("Helvetica", 9)
-        for v in vulns:
-            if y < 50:
-                c.showPage(); y = h-50
-            c.drawString(50, y, v["component"][:20])
-            c.drawString(200, y, v["cve"])
-            c.drawString(300, y, v["desc"][:60])
+            # b) CVE taraması (online / offline)
+            if is_online():
+                print("Online detected: using live CVE scanner")
+                vulns = scan_vulnerabilities(comps)
+            else:
+                print("Offline detected: falling back to offline scan")
+                vulns = scan_vulnerabilities_offline(comps)
+  
+            score_CVE = int((1 - len({v["component"] for v in vulns}) / len(comps)) * 100) if comps else 0
+
+            # c) PDF Raporu Oluştur
+            pdf_fn = f"report_{session['user']}_{int(time.time())}.pdf"
+            pdf_p = os.path.join(app.config["REPORT_FOLDER"], pdf_fn)
+            c = canvas.Canvas(pdf_p, pagesize=A4)
+            w, h = A4
+
+            # --- Başlık & Meta ---
+            c.setFont("Helvetica-Bold", 16)
+            c.drawCentredString(w / 2, h - 50, "CRA SBOM Analiz Raporu")
+            c.setFont("Helvetica", 10)
+            c.drawString(50, h - 80, f"Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            c.drawString(50, h - 95, f"SBOM: {os.path.basename(path)}")
+            c.drawString(50, h - 110, f"Bileşen: {len(comps)}, Zafiyet: {len(vulns)}, Skor: {score}%")
+
+            # --- Kriterler ---
+            y = h - 130
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, y, "Kriterler:")
+            c.setFont("Helvetica", 9)
+            for crit in criteria:
+                y -= 14
+                val = crit['status']
+                status = ("✔️" if val is True or val == 100 
+                          else "❌" if val is False or val == 0 
+                          else f"{val}%")
+                c.drawString(60, y, f"- {crit['name']}: {status}")
+
+            # --- Tablo Başlık ---
+            y -= 20
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(50, y,  "Bileşen")
+            c.drawString(200, y, "CVE ID")
+            c.drawString(300, y, "CVSS")
+            c.drawString(350, y, "Açıklama")
             y -= 12
-        c.save()
+            c.setFont("Helvetica", 9)
 
-        record_log(session["user"], f"report_generated {pdf_fn}")
-        entry = {
-            "user": session["user"],
-            "date": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "sbom": os.path.basename(path),
-            "score": score,
-            "file": pdf_fn
-        }
-        REPORTS.append(entry)
-        return jsonify(entry), 201
+            for v in vulns:
+                if y < 50:
+                    c.showPage()
+                    y = h - 50
+                    c.setFont("Helvetica-Bold", 10)
+                    c.drawString(50, y,  "Bileşen")
+                    c.drawString(200, y, "CVE ID")
+                    c.drawString(300, y, "CVSS")
+                    c.drawString(350, y, "Açıklama")
+                    y -= 12
+                    c.setFont("Helvetica", 9)
 
-    return jsonify([r for r in REPORTS if r["user"]==session["user"]])
+                c.drawString(50,  y, v['component'][:20])
+                c.drawString(200, y, v['cve'])
+                c.drawString(300, y, f"{v['cvss']:.1f}")
+                c.drawString(350, y, v['desc'][:40])
+                y -= 12
 
+            c.save()
+
+            # d) Log & JSON Response
+            record_log(session["user"], f"report_generated {pdf_fn}")
+            entry = {
+                "user": session["user"],
+                "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "sbom": os.path.basename(path),
+                "score": score,
+                "criteria": criteria,
+                "cves": vulns,
+                "file": pdf_fn
+            }
+            REPORTS.append(entry)
+            return jsonify(entry), 201
+
+        except Exception:
+            app.logger.error("Rapor oluşturma hatası:\n" + traceback.format_exc())
+            return jsonify({"error": "Rapor oluşturulurken hata oluştu"}), 500
+
+    # GET method: kullanıcının raporlarını döndür
+    user_reports = [r for r in REPORTS if r["user"] == session["user"]]
+    return jsonify(user_reports)
 
 # ─── Products ─────────────────────────────────────────────────────────────────
 
@@ -505,6 +554,44 @@ def delete_product(product_id):
 
     # 5) AJAX için boş 204 dön
     return ("", 204)
+
+@app.route('/compare', methods=['GET'])
+def compare_products():
+    if 'user' not in session:
+        return jsonify({'error':'Yetkisiz'}), 401
+
+    left_id  = request.args.get('left',  type=int)
+    right_id = request.args.get('right', type=int)
+    if not left_id or not right_id or left_id == right_id:
+        return jsonify({'error':'Geçersiz ürün seçimi'}), 400
+
+    # Sadece oturum kullanıcısının ürünleri
+    prods = Product.query.filter(
+        Product.user == session['user'],
+        Product.id.in_([left_id, right_id])
+    ).all()
+
+    # ID’ye göre map
+    data_map = {}
+    for p in prods:
+        path = os.path.join(app.config['UPLOAD_FOLDER'], p.sbom_path)
+        comps = parse_sbom(path)
+        # component→version dict
+        data_map[p.id] = {c['component']: c['version'] for c in comps}
+
+    # Tüm bileşenlerin birleşimi
+    all_comps = sorted({k for m in data_map.values() for k in m.keys()})
+
+    # Sonuç listesi
+    result = []
+    for comp in all_comps:
+        result.append({
+            'component':    comp,
+            'left_version':  data_map.get(left_id, {}).get(comp, '-'),
+            'right_version': data_map.get(right_id, {}).get(comp, '-')
+        })
+
+    return jsonify(result)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

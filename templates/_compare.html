@@ -1,0 +1,28 @@
+<!-- templates/_compare.html -->
+<div class="tab-pane fade" id="tab-compare">
+  <h4>Ürün Karşılaştır</h4>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-body">
+      <form id="compareForm" class="row g-3 align-items-end">
+        <div class="col-md-5">
+          <label for="leftProduct" class="form-label">Ürün 1</label>
+          <select id="leftProduct" class="form-select">
+            <option value="">Seçiniz</option>
+          </select>
+        </div>
+        <div class="col-md-5">
+          <label for="rightProduct" class="form-label">Ürün 2</label>
+          <select id="rightProduct" class="form-select">
+            <option value="">Seçiniz</option>
+          </select>
+        </div>
+        <div class="col-md-2 text-end">
+          <button type="submit" class="btn btn-primary w-100">Karşılaştır</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="compareResult"><!-- Sonuç tablosu buraya gelecek --></div>
+</div>
