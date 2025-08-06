@@ -63,14 +63,21 @@ Database: cra_analyzer
 Username: cra_user  
 Password: StrongPassw0rd!
 ```
+⚠️ These values are hardcoded in app.py and should not be changed unless you're modifying the project configuration manually.
 
 #### Step-by-Step
 #### Step 1: Install MySQL (if not already installed)
 - Download from: https://dev.mysql.com/downloads/
 
-  
-#### Step 2: Create a Database
-Run the following SQL commands in your **MySQL terminal** or client (e.g., **MySQL Workbench**):
+- During installation:
+  -- Take note of your root password
+  -- You can also install MySQL Workbench as a GUI interface
+
+#### Step 2: Create Database and User
+You can do this via **MySQL Workbench**
+1. Open MySQL Workbench
+2. Connect to the server as root
+3. In a new SQL tab, run:
 ```sql
 CREATE DATABASE cra_analyzer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -78,26 +85,19 @@ CREATE USER 'cra_user'@'localhost' IDENTIFIED BY 'StrongPassw0rd!';
 GRANT ALL PRIVILEGES ON cra_analyzer.* TO 'cra_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
+💡 If you plan to browse data with Workbench, also create a new connection for cra_user.
 
 #### Step 3: Import the Schema
-Import the `cra_analyzer_backup.sql` file into the new database:
-```bash
-mysql -u cra_user -p cra_analyzer < cra_analyzer_backup.sql
-```
-If prompted, enter the password: `StrongPassw0rd!`
-
-#### Optional: Add GUI Connection (MySQL Workbench)
-To manage the database visually:
-- Open **MySQL Workbench**
-- Create a new connection with:
-  -- Connection Name: `CRA User`
-  -- Host:  `localhost`
-  -- Port: `3306` (default)
-  -- Username:  `cra_user`
-  -- Password: `StrongPassw0rd!` (store in vault)
-
-This allows you to explore and query the `cra_analyzer` database directly.
-
+This project includes a pre-built schema and data file: `cra_analyzer_backup.sql`.
+To import it:
+  - Open MySQL Workbench
+  -  Connect to your database (as `root` or `cra_user`)
+  - Make sure `cra_analyzer` is selected as the active schema
+  - Go to: File > Open SQL Script
+     -- Select `cra_analyzer_backup.sql`
+  - Once opened in a new tab, click:
+      --⚡️ Execute (lightning bolt icon)
+  - After execution, refresh the SCHEMAS panel — you should now see the tables under cra_analyzer.
 
 ### 5. Run the App
 ```bash
