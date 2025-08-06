@@ -23,6 +23,7 @@
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-plans">Planlar</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-log">Seyir Defteri</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-reports">Raporlar</button></li>
+      <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-summary">Özet</button></li>
       <li class="mt-auto"><a href="{{ url_for('logout') }}" class="nav-link text-danger">Çıkış Yap</a></li>
     </ul>
   </nav>
@@ -40,6 +41,7 @@
       {% include '_plans.html' %}
       {% include '_log.html' %}
       {% include '_reports.html' %}
+      {% include '_summary.html' %}
     </div>
   </main>
 

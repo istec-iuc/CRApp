@@ -70,6 +70,34 @@ class Vulnerability(db.Model):
     description = db.Column(db.Text, nullable=False)
     scanned_at  = db.Column(db.DateTime, server_default=db.func.now())
 
+#Store Version Control Results
+class VersionCheckResult(db.Model):
+    __tablename__ = "version_check_results"
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user        = db.Column(db.String(128), nullable=False)    # To link to user
+    filename    = db.Column(db.String(256), nullable=False)    # Which SBOM file
+    component   = db.Column(db.String(255), nullable=False)    # Component name
+    current_version = db.Column(db.String(64), nullable=True)  # Version in SBOM
+    latest_version = db.Column(db.String(64), nullable=True) # Latest Version
+    status      = db.Column(db.String(64), nullable=True)      # E.g. "up-to-date", "outdated"
+    homepage = db.Column(db.String) 
+    checked_at  = db.Column(db.DateTime, server_default=db.func.now())
+
+#Store CVE scan Results
+class ScanResult(db.Model):
+    __tablename__ = "cve_scan_results"
+
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user         = db.Column(db.String(128), nullable=False)   # user who scanned
+    filename     = db.Column(db.String(256), nullable=False)   # SBOM file scanned
+    component    = db.Column(db.String(255), nullable=False)   # component name
+    cve_id       = db.Column(db.String(64), nullable=False)    # CVE identifier
+    cvss         = db.Column(db.Float, nullable=True)          # CVSS score
+    description  = db.Column(db.Text, nullable=False)          # CVE description
+    official_url = db.Column(db.String(512), nullable=True)    # link to official page or repo (optional)
+    scanned_at   = db.Column(db.DateTime, server_default=db.func.now())
+
 
 # ─── In‐Memory Stores & Utils ─────────────────────────────────────────────────
 
@@ -195,6 +223,26 @@ def scan_cve():
 
     comps = parse_sbom(path)
     results = scan_vulnerabilities(comps)
+
+
+    user = session["user"]
+    # Remove old version check results for this user and file
+    ScanResult.query.filter_by(user=user, filename=selected_file or latest).delete()
+    db.session.commit()
+    
+    for r in results:
+        record = ScanResult(
+            user=user,
+            filename=selected_file or latest,
+            component=r.get("component"),
+            cve_id=r.get("cve"),
+            cvss=r.get("cvss"),
+            description=r.get("desc"),
+            official_url=r.get("official_url")
+        )
+        db.session.add(record)
+    db.session.commit()
+
     return jsonify(results)
 
 
@@ -222,6 +270,26 @@ def scan_cve_offline():
 
     comps = parse_sbom(path)
     results = scan_vulnerabilities_offline(comps)
+
+    user = session["user"]
+
+    # Remove old version check results for this user and file
+    ScanResult.query.filter_by(user=user, filename=selected_file or latest).delete()
+    db.session.commit()
+
+    for r in results:
+        record = ScanResult(
+            user=user,
+            filename=selected_file or latest,
+            component=r.get("component"),
+            cve_id=r.get("cve"),
+            cvss=r.get("cvss"),
+            description=r.get("desc"),
+            official_url=r.get("official_url")
+        )
+        db.session.add(record)
+    db.session.commit()
+
     return jsonify(results)
 
 #Display the last updated timestamp of CVEs on open
@@ -305,6 +373,27 @@ def version_check():
 
     comps = parse_sbom(path)
     results = check_version(comps)
+
+     # Store results in DB for this user and file
+    user = session["user"]
+
+    # Remove old version check results for this user and file
+    VersionCheckResult.query.filter_by(user=user, filename=selected_file or latest).delete()
+    db.session.commit()
+
+    for r in results:
+        record = VersionCheckResult(
+            user=user,
+            filename=selected_file or latest,
+            component=r.get("component"),
+            current_version=r.get("current_version"),
+            latest_version=r.get("latest_version"),
+            homepage=r.get("homepage"),
+            status=r.get("is_current")
+        )
+        db.session.add(record)
+    db.session.commit()
+
     record_log(session["user"], "Versiyon kontrolü yapıldı")
     return jsonify(results)
 
@@ -585,7 +674,51 @@ def compare_products():
 
     return jsonify(result)
 
+from collections import defaultdict
+from sqlalchemy.inspection import inspect
+#HELPER FUNCTION:
+def row_to_dict(obj):
+    return {c.key: getattr(obj, c.key) for c in inspect(obj).mapper.column_attrs}
 
+
+@app.route('/summary', methods=['POST'])
+def output_summary():
+    if 'user' not in session:
+        return jsonify({'error':'Yetkisiz'}), 401
+
+    data = request.get_json()
+    filename = data.get('filename')
+    user = session['user']
+
+    # Fetch version check results
+    version_results = VersionCheckResult.query.filter_by(user=user, filename=filename).all()
+
+    # Fetch CVE scan results
+    cve_results = ScanResult.query.filter_by(user=user, filename=filename).all()
+
+    if not version_results and not cve_results:
+            return jsonify({'message': 'Seçilen dosya için herhangi bir veri bulunamadı'}), 200
+
+ # --- COUNT CVEs per component ---
+    cve_count_map = defaultdict(int)
+    for c in cve_results:
+        # Use .component or the correct attribute name from your CVEResult model
+        component_name = c.component.lower()
+        cve_count_map[component_name] += 1
+
+    # Create summary list from map
+    cve_summary = [{'component': comp, 'cve_count': count} for comp, count in cve_count_map.items()]
+
+    response = {
+        "version_results": [row_to_dict(v) for v in version_results],
+        "cve_results": cve_summary,  # summarized count, not full details
+        "missing": {
+            "version_check": not bool(version_results),
+            "cve_scan": not bool(cve_results)
+        }
+    }
+
+    return jsonify(response)
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

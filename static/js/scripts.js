@@ -439,6 +439,8 @@ updateLastUpdatedDisplay();
     loadReports();
   }
 
+
+  //PRODUCTS PAGES LOGIC
   async function loadProducts() {
     const res = await fetch('/products');
     if (!res.ok) return;
@@ -527,7 +529,53 @@ updateLastUpdatedDisplay();
     //Updating the comboboxes
     await loadSbomList();
   });
+
+// SBOM preview logic for Product Upload
+const productSbomInput = document.getElementById('sbom');
+if (productSbomInput) {
+  productSbomInput.addEventListener('change', async () => {
+    const file = productSbomInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+
+      const list = await res.json();
+
+      const tbody = document.querySelector('#productPreviewTable tbody');
+      tbody.innerHTML = '';
+      list.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${item.component}</td><td>${item.version}</td>`;
+        tbody.appendChild(row);
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert('SBOM önizleme yüklenemedi/ Products page /');
+    }
+  });
+}
+
+// Clear the sbom components display after upload
+const productUploadBtn = document.getElementById("productUploadBtn")
+if(productUploadBtn) {
+  productUploadBtn.addEventListener("click", async () => {
+    const tbody = document.querySelector('#productPreviewTable tbody');
+    tbody.innerHTML = '';
+  })
+}
+
   
+
   // “Ürünler” sekmesi aktif olduğunda da listeyi yüklesin
   document.querySelector('[data-bs-target="#tab-products"]')
     .addEventListener('shown.bs.tab', loadProducts);
@@ -598,4 +646,97 @@ updateLastUpdatedDisplay();
       html += `</tbody></table>`;
       div.innerHTML = html;
     });
+
+
+
+//OUTPUT LOGIC
+const summaryBtn = document.getElementById("summaryBtn");
+if(summaryBtn) {
+  summaryBtn.addEventListener("click", async () => {
+    const file = document.getElementById("sbomSelector-summary").value;
+
+    if (!file) {
+      alert("Lütfen bir SBOM dosyası seçin.");
+      return;
+    }
+
+    try {
+          const res = await fetch('/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file })
+        });
+
+        const data = await res.json();
+        const summaryBody = document.querySelector("#summaryTable tbody");
+        summaryBody.innerHTML = '';
+
+        // Optional: show a warning if something is missing
+        //if (data.missing.version_check) {
+        //  alert("Bu dosya için versiyon kontrolü yapılmamış.");
+       // }
+        //if (data.missing.cve_scan) {
+        //  alert("Bu dosya için CVE taraması yapılmamış.");
+        //}
+
+        if (data.message) {
+          alert(data.message);
+          return;
+        } else {
+          if (data.missing?.version_check) {
+            alert("Bu dosya için versiyon kontrolü yapılmamış.");
+          }
+
+          if (data.missing?.cve_scan) {
+            alert("Bu dosya için CVE taraması yapılmamış.");
+          }
+        }
+
+
+
+
+        // Handle case where no version data exists at all
+      if (data.version_results?.length === 0) {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td colspan="5" class="text-center text-muted">Veri bulunamadı</td>`;
+        summaryBody.appendChild(row);
+        return;
+      }
+
+        let cveMap = {};
+       // Combine version + CVE results by component
+      if (Array.isArray(data.cve_results)) {
+        data.cve_results.forEach(cve => {
+          cveMap[cve.component.toLowerCase()] = cve;
+        });
+      }
+
+      // Build the table
+      data.version_results.forEach(item => {
+        const component = item.component.toLowerCase();
+        const cve = cveMap[component];
+        const homepage = item.homepage ? `<a href="${item.homepage}" target="_blank">${new URL(item.homepage).hostname}</a>` : '—';
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${item.component}</td>
+          <td>${item.current_version}</td>
+          <td>${item.latest_version}</td>
+          <td>${cve ? `CVE: ${cve.cve_count}` : 'Yok'}</td>
+          <td>${homepage}</td> 
+        `;
+        summaryBody.appendChild(row);
+      });
+
+    } catch (e){
+      console.error("Summary fetch error:", e);
+      alert("Özet verisi alınırken bir hata oluştu.");
+    }
+
+  });
+}
+
+
+
+
 });
+
