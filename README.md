@@ -55,13 +55,57 @@ venv\Scripts\activate         # On Windows
 pip install -r requirements.txt
 ```
 
-### 4. Run the App
+### 4. Database Setup
+This project uses a MySQL database, and the connection is already configured with the following credentials:
+```makefile
+Host:     localhost  
+Database: cra_analyzer  
+Username: cra_user  
+Password: StrongPassw0rd!
+```
+
+#### Step-by-Step
+#### Step 1: Install MySQL (if not already installed)
+- Download from: https://dev.mysql.com/downloads/
+
+  
+#### Step 2: Create a Database
+Run the following SQL commands in your **MySQL terminal** or client (e.g., **MySQL Workbench**):
+```sql
+CREATE DATABASE cra_analyzer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER 'cra_user'@'localhost' IDENTIFIED BY 'StrongPassw0rd!';
+GRANT ALL PRIVILEGES ON cra_analyzer.* TO 'cra_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+#### Step 3: Import the Schema
+Import the `cra_analyzer_backup.sql` file into the new database:
+```bash
+mysql -u cra_user -p cra_analyzer < cra_analyzer_backup.sql
+```
+If prompted, enter the password: `StrongPassw0rd!`
+
+#### Optional: Add GUI Connection (MySQL Workbench)
+To manage the database visually:
+- Open **MySQL Workbench**
+- Create a new connection with:
+  -- Connection Name: `CRA User`
+  -- Host:  `localhost`
+  -- Port: `3306` (default)
+  -- Username:  `cra_user`
+  -- Password: `StrongPassw0rd!` (store in vault)
+
+This allows you to explore and query the `cra_analyzer` database directly.
+
+
+### 5. Run the App
 ```bash
 python app.py
 ```
 The application should now be running at http://127.0.0.1:5000
 
-### 5. (Optional) Update CVE Database for Offline Scanning
+### 6. (Optional) Update CVE Database for Offline Scanning
 After starting the application and uploading an SBOM file:
  - Go to the "CVE scan" page.
  - Click the "Update CVE Data" button.
@@ -113,6 +157,7 @@ The app will start and be accessible at http://127.0.0.1:5000 in your browser.
 ```plaintext
 .
 ├── app.py
+├── cra_analyzer_backup.sql
 ├── cra_rule_checker.py
 ├── last_updated.txt
 ├── offline_vulnerability_scanner.py
