@@ -329,14 +329,6 @@ def cra_score():
     record_log(session["user"], "CRA skoru hesaplandı")
     return jsonify(res)
 
-    files = os.listdir(app.config["UPLOAD_FOLDER"])
-    if not files:
-        return jsonify({"error":"Önce SBOM yükleyin"}), 400
-    latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
-                    sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
-    res    = run_cra_checks(latest_path)
-    return jsonify(res)
-
 
 # ─── Plans & Logs ─────────────────────────────────────────────────────────────
 
