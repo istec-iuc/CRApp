@@ -133,24 +133,36 @@ The app will start and be accessible at http://127.0.0.1:5000 in your browser.
 ### 3. (Optional) Upload Product Metadata
 - On the "Upload Product" page, you can upload additional product information to link with the SBOM file.
 
-### 4. Scan for Vulnerabilities (CVE)
+### 4. (Optional) Compare Products & Versions
+- Navigate to the "Products" page.
+- Select two uploaded products from the list.
+- Click the **"Compare"** button to view a side-by-side comparison of:
+  -- SBOM components
+  -- Component versions
+This helps identify changes between different product versions or builds, and assess how updates may have impacted the overall security posture.
+
+### 5. Scan for Vulnerabilities (CVE)
 - Go to the "CVE Scan" page.
 - Choose Online or Offline scanning.
   -- Online scan pulls real-time CVE data from the NVD.
   -- Offline scan uses locally stored CVE data (after clicking Update CVE Data on the "Version Control" page).
 
-### 5. Check CRA Compliance
+### 6. Check CRA Compliance
 - Visit the "CRA Score" page.
 - The app calculates your CRA compliance score based on predefined rules and logic.
 - This score helps evaluate how well your software aligns with the EU Cyber Resilience Act.
 
-### 6. Generate Report
+### 7. Generate Report
 - On the "Reports" page, click Generate Report.
 - A professional PDF report will be created, summarizing:
   -- SBOM components
   -- Detected vulnerabilities
   -- CRA compliance score
 - The report is saved for later access or download.
+---
+<p align="center">
+  <img src="docs/CRA_Analyzer.png" alt="Workflow Diagram" width="600"/>
+</p>
 
 ---
 ## 📁 Project Structure:
@@ -187,6 +199,7 @@ The app will start and be accessible at http://127.0.0.1:5000 in your browser.
 │   ├── _plans.html
 │   ├── _products.html
 │   ├── _product_add.html
+|   ├── _compare.html
 │   ├── _reports.html
 │   ├── _scan.html
 │   ├── _score.html
