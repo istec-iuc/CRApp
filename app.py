@@ -1,6 +1,7 @@
 # app.py
 import os
 import time
+import traceback
 from io import BytesIO
 from flask import (
     Flask, render_template, request, redirect,
@@ -328,14 +329,6 @@ def cra_score():
     record_log(session["user"], "CRA skoru hesaplandı")
     return jsonify(res)
 
-    files = os.listdir(app.config["UPLOAD_FOLDER"])
-    if not files:
-        return jsonify({"error":"Önce SBOM yükleyin"}), 400
-    latest_path = os.path.join(app.config["UPLOAD_FOLDER"],
-                    sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)))[-1])
-    res    = run_cra_checks(latest_path)
-    return jsonify(res)
-
 
 # ─── Plans & Logs ─────────────────────────────────────────────────────────────
 
@@ -405,7 +398,6 @@ def reports():
                 print("Offline detected: falling back to offline scan")
                 vulns = scan_vulnerabilities_offline(comps)
   
-            score_CVE = int((1 - len({v["component"] for v in vulns}) / len(comps)) * 100) if comps else 0
 
             # c) PDF Raporu Oluştur
             pdf_fn = f"report_{session['user']}_{int(time.time())}.pdf"
