@@ -1,5 +1,6 @@
 # app.py
 import os
+import tempfile
 import time
 import traceback
 from io import BytesIO
@@ -15,13 +16,14 @@ from sbom_parser import parse_sbom
 from vulnerability_scanner import scan_vulnerabilities
 from version_checker import check_version
 from cra_rule_checker import run_cra_checks
-from offline_vulnerability_scanner import scan_vulnerabilities_offline, load_cve_database
+from offline_vulnerability_scanner import scan_vulnerabilities_offline
 from update_vulnerability_scanner import download_and_extract_latest_cve_files
 from datetime import datetime, timezone, timedelta
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import socket
+import json
 
 
 # ─── App & Config ──────────────────────────────────────────────────────────────
@@ -171,14 +173,38 @@ def index():
 def upload_sbom():
     if "user" not in session:
         return jsonify({"error":"Yetkisiz"}), 401
-    f = request.files.get("file")
+    
+    #f = request.files.get("file") -> SBOM Yukle page leftover
+    f = request.files.get("sbom")
+    print("Comment from the uploade route in app.py")
+    print("Received file name:", f.filename if f else "None")
+
     if not f:
+        print("No file received!")
         return jsonify({"error":"Dosya bulunamadı"}), 400
-    fn   = secure_filename(f.filename)
-    path = os.path.join(app.config["UPLOAD_FOLDER"], fn)
-    f.save(path)
-    comps = parse_sbom(path)
-    return jsonify(comps[:50])
+    
+    try:
+        # Save to a temporary file
+        '''
+        tempfile.NamedTemporaryFile(delete=False) gives you a unique path.
+        The file is saved only for parsing, then immediately deleted.
+        No filename collisions or leftover files.
+        You don’t store the file permanently unless it's submitted via /products/new.
+        '''
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+            f.save(tmp.name)
+            path = tmp.name
+
+        # Parse the temp file
+        comps = parse_sbom(path)
+
+        # Clean up
+        os.remove(path)
+
+        return jsonify(comps[:50])
+    except Exception as e:
+        return jsonify({"error": f"SBOM analiz hatası: {str(e)}"}), 500
+
 
 #Returns the list of all uploaded files
 @app.route("/list-sboms", methods=["GET"])
@@ -186,17 +212,18 @@ def list_sboms():
     if "user" not in session:
         return jsonify({"error": "Yetkisiz"}), 401
     
-    allowed_exts = {'.json', '.xml'}
-    files = [
-        f for f in os.listdir(app.config["UPLOAD_FOLDER"])
-        if not f.startswith('.') and os.path.splitext(f)[1].lower() in allowed_exts
-    ]
+    # Get products uploaded by the current user
+    products = Product.query.filter_by(user=session["user"]).all()
 
-    #HOW DO I MAKE IT TAKE THEM FROM THE DATABASE?
-    #files = os.listdir(app.config["UPLOAD_FOLDER"])
-    files = sorted(files, key=lambda f: os.path.getctime(os.path.join(app.config["UPLOAD_FOLDER"], f)), reverse=True)
+    # Return list of dicts: filename + product info
+    result = []
+    for p in products:
+        result.append({
+            "sbom_path": p.sbom_path,
+            "label": f"{p.brand} {p.model} ({p.version})"
+        })
 
-    return jsonify(files)
+    return jsonify(result)
 
 
 @app.route('/scan-online', methods=['POST'])
@@ -346,6 +373,94 @@ def update_cve():
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+
+VERSION_MAPPING_PATH = "version_mapping.json"
+from version_checker import clean_version
+from version_checker import safe_parse
+from packaging import version as pkg_version
+import re
+
+def get_latest_version_display(versions):
+    if isinstance(versions, str):
+        versions = [versions]
+    cleaned_versions = [safe_parse(clean_version(v)) for v in versions]
+    cleaned_versions = [v for v in cleaned_versions if v is not None]
+    return str(max(cleaned_versions)) if cleaned_versions else ''
+
+
+#This route gives us the contents of the version_mapping.json file
+@app.route("/version-editor/data", methods=["GET"])
+def get_version_mapping():
+    try:
+        with open(VERSION_MAPPING_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+            # Add "latest_display" field to each entry
+            for comp, details in data.items():
+                data[comp]["latest_display"] = get_latest_version_display(details["latest"])
+
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/version-editor/update", methods=["POST"])
+def update_version_mapping():
+    data = request.get_json()
+    component = data.get("component", "").strip()
+    latest = data.get("latest", [])
+    homepage = data.get("homepage", "").strip()
+
+    if not component or not latest or not homepage:
+        return jsonify({"error": "Eksik alanlar var"}), 400
+
+    if isinstance(latest, str):
+        latest = [v.strip() for v in latest.split(",") if v.strip()]
+
+    try:
+        with open(VERSION_MAPPING_PATH, "r", encoding="utf-8") as f:
+            version_data = json.load(f)
+    except FileNotFoundError:
+        version_data = {}
+
+    version_data[component] = {
+        "latest": latest if len(latest) > 1 else latest[0],
+        "homepage": homepage
+    }
+
+    with open(VERSION_MAPPING_PATH, "w", encoding="utf-8") as f:
+        json.dump(version_data, f, indent=2, ensure_ascii=False)
+
+    return jsonify({"message": "Güncellendi", "data": version_data})
+
+
+
+@app.route("/version-editor/delete", methods=["POST"])
+def delete_version_component():
+    data = request.get_json()
+    component = data.get("component", "").strip()
+
+    if not component:
+        return jsonify({"error": "Bileşen adı boş olamaz"}), 400
+
+    try:
+        with open(VERSION_MAPPING_PATH, "r", encoding="utf-8") as f:
+            version_data = json.load(f)
+
+        if component not in version_data:
+            return jsonify({"error": f"{component} bulunamadı"}), 404
+
+        del version_data[component]
+
+        with open(VERSION_MAPPING_PATH, "w", encoding="utf-8") as f:
+            json.dump(version_data, f, indent=2, ensure_ascii=False)
+
+        return jsonify({"message": f"{component} silindi"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 
 @app.route('/version-check', methods=['GET', "POST"])
@@ -573,6 +688,7 @@ def reports():
 def products():
     if "user" not in session:
         return jsonify([]), 401
+    
     prods = Product.query.filter_by(user=session["user"]).all()
     return jsonify([
         {
@@ -589,6 +705,7 @@ def products():
 def products_new():
     if "user" not in session:
         return jsonify({"error":"Yetkisiz"}), 401
+    
     f = request.files.get("sbom")
     fn = secure_filename(f"{int(time.time())}_{f.filename}")
     f.save(os.path.join(app.config["UPLOAD_FOLDER"], fn))
@@ -679,7 +796,6 @@ from sqlalchemy.inspection import inspect
 #HELPER FUNCTION:
 def row_to_dict(obj):
     return {c.key: getattr(obj, c.key) for c in inspect(obj).mapper.column_attrs}
-
 
 @app.route('/summary', methods=['POST'])
 def output_summary():
