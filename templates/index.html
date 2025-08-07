@@ -1,3 +1,4 @@
+<!--index.html-->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -13,11 +14,13 @@
     <h5>CRA Analyzer</h5>
     <small>Hoşgeldin, {{ user }}</small>
     <ul class="nav nav-pills flex-column mt-3 mb-auto">
-      <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-upload">SBOM Yükle</button></li>
+      <!--1/3 The Upload page -> SBOM Yükle is hidden due to being unnecessary for now-->
+      <!--<li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-upload">SBOM Yükle</button></li>-->
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-product-add">Ürün Ekle</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-products">Ürünler</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-compare">Karşılaştır</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-scan">CVE Tarama</button></li>
+      <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-version-editor">Bileşen Sürümleri</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-version">Versiyon Kontrolü</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-score">CRA Skoru</button></li>
       <li><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-plans">Planlar</button></li>
@@ -34,8 +37,10 @@
       {% include '_product_add.html' %}
       {% include '_products.html' %}
       {% include '_compare.html' %}
-      {% include '_upload.html' %}
+      {# <!--2/3 The Upload page -> SBOM Yükle is hidden due to being unnecessary for now--> #}
+      {# {% include '_upload.html' %} #}
       {% include '_scan.html' %}
+      {% include '_version_editor.html' %}
       {% include '_version.html' %}
       {% include '_score.html' %}
       {% include '_plans.html' %}
