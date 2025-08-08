@@ -276,6 +276,10 @@ function loadVersionData() {
     .then(data => {
       tableBody.innerHTML = "";
       for (const [name, info] of Object.entries(data)) {
+        //For debugging
+        //console.log(info)
+        //console.log(info.latest_display)
+        
         const row = document.createElement("tr");
         //FILTER THROUGH VS V for version !
         row.innerHTML = `
@@ -325,22 +329,22 @@ form.addEventListener("submit", function (e) {
         }
       }
 
-      fetch("/version-editor/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ component, latest, homepage })
-      })
-      .then(res => res.json())
-      .then(result => {
-        if (result.error) {
-          alert(result.error);
-        } else {
-          alert("Başarıyla güncellendi.");
-          loadVersionData();
-          form.reset();
-        }
-      });
+  fetch("/version-editor/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ component, latest, homepage })
+    }).then(res => res.json())
+    .then(result => {
+    if (result.error) {
+      alert(result.error);
+    } else {
+      alert("Başarıyla güncellendi.");
+      loadVersionData();
+      form.reset();
+    }
+
     });
+  });
 });
 
 

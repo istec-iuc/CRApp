@@ -396,6 +396,7 @@ def get_version_mapping():
         with open(VERSION_MAPPING_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+
             # Add "latest_display" field to each entry
             for comp, details in data.items():
                 data[comp]["latest_display"] = get_latest_version_display(details["latest"])
@@ -432,7 +433,14 @@ def update_version_mapping():
     with open(VERSION_MAPPING_PATH, "w", encoding="utf-8") as f:
         json.dump(version_data, f, indent=2, ensure_ascii=False)
 
-    return jsonify({"message": "Güncellendi", "data": version_data})
+    # Prepare a response copy
+    response_entry = {
+        "latest": version_data[component]["latest"],
+        "homepage": version_data[component]["homepage"],
+        "latest_display": get_latest_version_display(version_data[component]["latest"])
+    }
+
+    return jsonify({"message": "Güncellendi", "data": response_entry})
 
 
 

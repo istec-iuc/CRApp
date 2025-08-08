@@ -27,7 +27,7 @@ def clean_version(v):
     v = v.strip()
 
     # Extract the first version-like pattern
-    match = re.search(r'\d+(\.\d+)+', v)
+    match = re.search(r'\d+(\.\d+)*', v)
     return match.group(0) if match else ''
 
 def safe_parse(v):
