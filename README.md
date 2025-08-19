@@ -43,14 +43,6 @@
 git clone https://github.com/istec-iuc/CRApp.git
 cd CRApp
 ```
-
-### 2. Create a Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate      # On Linux/Mac
-venv\Scripts\activate         # On Windows
-```
-
 ### Why use a virtual environment?
 A virtual environment keeps this project’s Python packages isolated from other projects on your machine.  
 This avoids version conflicts and makes sure everyone uses the same dependencies listed in `requirements.txt`.
