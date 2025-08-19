@@ -43,13 +43,28 @@
 git clone https://github.com/istec-iuc/CRApp.git
 cd CRApp
 ```
+### Why use a virtual environment?
+A virtual environment keeps this project’s Python packages isolated from other projects on your machine.  
+This avoids version conflicts and makes sure everyone uses the same dependencies listed in `requirements.txt`.
 
-### 2. Create a Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate      # On Linux/Mac
-venv\Scripts\activate         # On Windows
+### 2.1 Activate the Virtual Environment
+- Linux / macOS (bash/zsh):
+ ```
+source venv/bin/activate
 ```
+
+- Windows (PowerShell):
+```
+venv\Scripts\Activate.ps1
+```
+
+⚠️ Note for PowerShell users:
+If you see an error like "execution of scripts is disabled on this system", run this command once in the same PowerShell window to temporarily allow script execution:
+```
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+Then re-run the previous command. 
+
 ### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
@@ -67,11 +82,14 @@ Password: StrongPassw0rd!
 
 #### Step-by-Step
 #### Step 1: Install MySQL (if not already installed)
-- Download from: https://dev.mysql.com/downloads/
+- Download from: [MySQL Community Downloads](https://dev.mysql.com/downloads/mysql/)
+
+💡 If this is your first time installing MySQL, follow the official tutorial for setup, which covers installation, creating users, and starting the server:  
+[MySQL Installation and Setup Guide](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
 - During installation:
   -- Take note of your root password
-  -- You can also install MySQL Workbench as a GUI interface
+  -- You can also install MySQL Workbench as a GUI interface [Download MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
 
 #### Step 2: Create Database and User
 You can do this via **MySQL Workbench**
@@ -85,19 +103,8 @@ CREATE USER 'cra_user'@'localhost' IDENTIFIED BY 'StrongPassw0rd!';
 GRANT ALL PRIVILEGES ON cra_analyzer.* TO 'cra_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
-💡 If you plan to browse data with Workbench, also create a new connection for cra_user.
-
-#### Step 3: Import the Schema
-This project includes a pre-built schema and data file: `cra_analyzer_backup.sql`.
-To import it:
-  - Open MySQL Workbench
-  -  Connect to your database (as `root` or `cra_user`)
-  - Make sure `cra_analyzer` is selected as the active schema
-  - Go to: File > Open SQL Script
-     -- Select `cra_analyzer_backup.sql`
-  - Once opened in a new tab, click:
-      --⚡️ Execute (lightning bolt icon)
-  - After execution, refresh the SCHEMAS panel — you should now see the tables under cra_analyzer.
+💡 Optional: You can create a MySQL Workbench connection using `cra_user` credentials.  
+This is **not required for the app to run**, but it makes browsing tables, checking data, and troubleshooting easier.
 
 ### 5. Run the App
 ```bash
