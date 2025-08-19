@@ -268,7 +268,7 @@ if (scanUpdateBtn) {
 
 // Version Editor of the JSON File
 const form = document.getElementById("versionForm");
-const tableBody = document.querySelector("#versionTable tbody");
+const tableBody = document.querySelector("#versionEditorTable tbody");
 
 function loadVersionData() {
   fetch("/version-editor/data")
@@ -392,6 +392,8 @@ const versionBtn = document.getElementById('versionBtn');
 if (versionBtn) {
   versionBtn.addEventListener('click', async () => {
     const selectedFile = document.getElementById("sbomSelector-version").value;
+    console.log("Selected SBOM file:", selectedFile);
+
     versionBtn.disabled = true;
     versionBtn.textContent = 'Kontrol ediliyor...';
 
@@ -405,6 +407,9 @@ if (versionBtn) {
         body: JSON.stringify({ filename: selectedFile })
       });
       const data = await res.json();
+      console.log("RECEIVED DATA:");
+      console.log(data);
+      
       const tbody = document.querySelector('#versionTable tbody');
       tbody.innerHTML = '';
       data.forEach(item => {

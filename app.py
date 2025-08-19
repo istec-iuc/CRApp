@@ -518,6 +518,9 @@ def version_check():
     db.session.commit()
 
     record_log(session["user"], "Versiyon kontrolü yapıldı")
+
+    print("RESULTS FROM VERSION_CHECK POST request:")
+    print(results)
     return jsonify(results)
 
 

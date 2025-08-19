@@ -65,6 +65,9 @@ def check_version(components):
         #except Exception:
         #    latest = 'unknown'
 
+        #if latest_list is None or not latest_list:
+        #    latest_list = ['unknown']
+
         parsed_versions = [
             (v, safe_parse(clean_version(v)))
             for v in latest_list
